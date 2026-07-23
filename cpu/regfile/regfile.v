@@ -1,19 +1,19 @@
 module regfile(
     input  wire        clk,
-    // è¯»ç«¯å£ 1
+    // ¶Á¶Ë¿Ú 1
     input  wire [4:0]  raddr1,
     output wire [31:0] rdata1,
-    // è¯»ç«¯å£ 2
+    // ¶Á¶Ë¿Ú 2
     input  wire [4:0]  raddr2,
     output wire [31:0] rdata2,
-    // å†™ç«¯å£
+    // Ğ´¶Ë¿Ú
     input  wire        we,
     input  wire [4:0]  waddr,
     input  wire [31:0] wdata
 );
     reg [31:0] rf [31:0];
 
-    // åŒæ­¥å†™ï¼šç­‰æ—¶é’Ÿä¸Šå‡æ²¿æ‰æ›´æ–°
+    // Í¬²½Ğ´£ºµÈÊ±ÖÓÉÏÉıÑØ²Å¸üĞÂ
     always @(posedge clk) begin
         if (we && (waddr != 5'd0)) begin
             rf[waddr] <= wdata;

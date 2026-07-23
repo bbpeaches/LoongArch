@@ -52,12 +52,12 @@ module thinpad_top(
 /* =========== Core Logic Begin =========== */
 
 // ----------------------------------------
-// 1. 时钟与复位生成
+// 1. 时钟与复位生成 (维持 10MHz 不变)
 // ----------------------------------------
 wire locked, clk_10M, clk_20M;
 pll_example clock_gen (
   .clk_in1(clk_50M),
-  .clk_out1(clk_10M), // 统一降频到10M，确保纯组合逻辑乘法器和SRAM时序充裕
+  .clk_out1(clk_10M), 
   .clk_out2(clk_20M),
   .reset(reset_btn),
   .locked(locked)
@@ -71,7 +71,7 @@ end
 wire cpu_resetn = ~reset_of_clk10M;
 
 // ----------------------------------------
-// 2. 串口收发控制器 (修改波特率为115200, 时钟为10M)
+// 2. 串口收发控制器 
 // ----------------------------------------
 wire [7:0] ext_uart_rx;
 reg  [7:0] ext_uart_buffer;
@@ -97,91 +97,184 @@ async_transmitter #(.ClkFrequency(10000000), .Baud(115200)) ext_uart_t (
 );
 
 // ----------------------------------------
-// 3. 例化你的 CPU
+// 3. 例化 AXI 接口 CPU (mycpu_top)
 // ----------------------------------------
-wire        cpu_inst_en;
-wire [31:0] cpu_inst_addr;
-wire [31:0] cpu_inst_rdata;
-wire        cpu_inst_wait; 
+wire [ 3:0] arid, arlen, arcache, awid, awlen, awcache, wid, wstrb, rid, bid;
+wire [31:0] araddr, rdata, awaddr, wdata;
+wire [ 2:0] arsize, arprot, awsize, awprot;
+wire [ 1:0] arburst, arlock, awburst, awlock, rresp, bresp;
+wire arvalid, arready, rlast, rvalid, rready;
+wire awvalid, awready, wlast, wvalid, wready;
+wire bvalid, bready;
 
-wire        cpu_data_en;
-wire [ 3:0] cpu_data_wen;
-wire [31:0] cpu_data_addr;
-wire [31:0] cpu_data_wdata;
-reg  [31:0] cpu_data_rdata;
-
-cpu u_cpu (
-    .clk                  (clk_10M), 
-    .resetn               (cpu_resetn),
-    .inst_sram_wait       (cpu_inst_wait), // 新增的用于阻塞取指的信号
-
-    .inst_sram_en         (cpu_inst_en),
-    .inst_sram_addr       (cpu_inst_addr),
-    .inst_sram_rdata      (cpu_inst_rdata),
-
-    .data_sram_en         (cpu_data_en),
-    .data_sram_wen        (cpu_data_wen),
-    .data_sram_addr       (cpu_data_addr),
-    .data_sram_wdata      (cpu_data_wdata),
-    .data_sram_rdata      (cpu_data_rdata),
-    .data_sram_resp_valid (cpu_data_en),   // 单周期同步返回
+mycpu_top u_cpu (
+    .aclk       (clk_10M),
+    .aresetn    (cpu_resetn),
     
-    // Debug 悬空即可
-    .debug_wb_pc(), .debug_wb_rf_wen(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
+    .arid       (arid),
+    .araddr     (araddr),
+    .arlen      (arlen),
+    .arsize     (arsize),
+    .arburst    (arburst),
+    .arlock     (arlock),
+    .arcache    (arcache),
+    .arprot     (arprot),
+    .arvalid    (arvalid),
+    .arready    (arready),
+    
+    .rid        (rid),
+    .rdata      (rdata),
+    .rresp      (rresp),
+    .rlast      (rlast),
+    .rvalid     (rvalid),
+    .rready     (rready),
+    
+    .awid       (awid),
+    .awaddr     (awaddr),
+    .awlen      (awlen),
+    .awsize     (awsize),
+    .awburst    (awburst),
+    .awlock     (awlock),
+    .awcache    (awcache),
+    .awprot     (awprot),
+    .awvalid    (awvalid),
+    .awready    (awready),
+    
+    .wid        (wid),
+    .wdata      (wdata),
+    .wstrb      (wstrb),
+    .wlast      (wlast),
+    .wvalid     (wvalid),
+    .wready     (wready),
+    
+    .bid        (bid),
+    .bresp      (bresp),
+    .bvalid     (bvalid),
+    .bready     (bready),
+    
+    .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
 );
 
 // ----------------------------------------
-// 4. 地址译码与仲裁
+// 4. AXI 从机转换逻辑 (将 AXI 转为 SRAM 时序)
 // ----------------------------------------
-// 数据空间译码
-wire data_is_base = (cpu_data_addr[31:22] == 10'h070); // 0x1c000000
-wire data_is_ext  = (cpu_data_addr[31:22] == 10'h071); // 0x1c400000
-wire data_is_uart = (cpu_data_addr[31:20] == 12'h1f0); // 0x1f000000
+// --- 读通道 (AR & R) ---
+reg rvalid_reg;
+reg [31:0] raddr_reg;
+reg [3:0]  rid_reg;
 
-// 指令空间译码
-wire inst_is_base = (cpu_inst_addr[31:22] == 10'h070); 
-wire inst_is_ext  = (cpu_inst_addr[31:22] == 10'h071); 
+wire read_fire = arvalid && arready;
 
-// 冲突仲裁：当数据和指令同时访问同一个物理RAM时，数据优先，指令挂起等待
-wire conflict_base = (cpu_data_en && data_is_base) && (cpu_inst_en && inst_is_base);
-wire conflict_ext  = (cpu_data_en && data_is_ext)  && (cpu_inst_en && inst_is_ext);
-assign cpu_inst_wait = conflict_base || conflict_ext; 
+always @(posedge clk_10M) begin
+    if (!cpu_resetn) begin
+        rvalid_reg <= 0;
+    end else if (read_fire) begin
+        rvalid_reg <= 1;
+        raddr_reg <= araddr;
+        rid_reg <= arid;
+    end else if (rvalid && rready) begin
+        rvalid_reg <= 0;
+    end
+end
 
-// 仲裁后的指令放行许可
-wire inst_base_ack = (cpu_inst_en && inst_is_base) && !conflict_base;
-wire inst_ext_ack  = (cpu_inst_en && inst_is_ext)  && !conflict_ext;
+assign arready = (!rvalid_reg || (rvalid && rready)); 
+assign rvalid  = rvalid_reg;
+assign rlast   = 1'b1;
+assign rresp   = 2'b0;
+assign rid     = rid_reg;
 
-// BaseRAM 控制信号合成
-assign base_ram_ce_n = ~((cpu_data_en && data_is_base) || inst_base_ack);
-assign base_ram_we_n = ~((cpu_data_en && data_is_base) && (cpu_data_wen != 4'b0000));
-assign base_ram_oe_n = ~(((cpu_data_en && data_is_base) && (cpu_data_wen == 4'b0000)) || inst_base_ack);
-assign base_ram_be_n =  (cpu_data_en && data_is_base) ? ~cpu_data_wen : 4'b0000;
-assign base_ram_addr =  (cpu_data_en && data_is_base) ? cpu_data_addr[21:2] : cpu_inst_addr[21:2];
-assign base_ram_data = ((cpu_data_en && data_is_base) && (cpu_data_wen != 4'b0000)) ? cpu_data_wdata : 32'bz;
+wire [31:0] current_raddr = read_fire ? araddr : raddr_reg;
 
-// ExtRAM 控制信号合成
-assign ext_ram_ce_n  = ~((cpu_data_en && data_is_ext) || inst_ext_ack);
-assign ext_ram_we_n  = ~((cpu_data_en && data_is_ext) && (cpu_data_wen != 4'b0000));
-assign ext_ram_oe_n  = ~(((cpu_data_en && data_is_ext) && (cpu_data_wen == 4'b0000)) || inst_ext_ack);
-assign ext_ram_be_n  =  (cpu_data_en && data_is_ext) ? ~cpu_data_wen : 4'b0000;
-assign ext_ram_addr  =  (cpu_data_en && data_is_ext) ? cpu_data_addr[21:2] : cpu_inst_addr[21:2];
-assign ext_ram_data  = ((cpu_data_en && data_is_ext) && (cpu_data_wen != 4'b0000)) ? cpu_data_wdata : 32'bz;
+// --- 写通道 (AW, W & B) ---
+reg aw_recvd, w_recvd;
+reg [31:0] awaddr_reg;
+reg [31:0] wdata_reg;
+reg [ 3:0] wstrb_reg;
+reg [ 3:0] bid_reg;
+reg bvalid_reg;
 
-// 指令读取数据 MUX 返回给 CPU
-assign cpu_inst_rdata = inst_base_ack ? base_ram_data : 
-                        inst_ext_ack  ? ext_ram_data  : 32'd0;
+wire aw_fire = awvalid && awready;
+wire w_fire  = wvalid && wready;
+
+always @(posedge clk_10M) begin
+    if (!cpu_resetn) begin
+        aw_recvd <= 0;
+        w_recvd <= 0;
+        bvalid_reg <= 0;
+    end else begin
+        if (bvalid && bready) begin
+            bvalid_reg <= 0;
+        end
+        
+        if (aw_fire) begin
+            aw_recvd <= 1;
+            awaddr_reg <= awaddr;
+            bid_reg <= awid;
+        end
+        if (w_fire) begin
+            w_recvd <= 1;
+            wdata_reg <= wdata;
+            wstrb_reg <= wstrb;
+        end
+        
+        // 当地址和数据均收到，执行物理写操作，并响应 B 通道
+        if ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg) begin
+            bvalid_reg <= 1;
+            aw_recvd <= 0;
+            w_recvd <= 0;
+        end
+    end
+end
+
+assign awready = !aw_recvd && !bvalid_reg;
+assign wready  = !w_recvd && !bvalid_reg;
+assign bvalid  = bvalid_reg;
+assign bresp   = 2'b0;
+assign bid     = bid_reg;
+
+// 物理层执行使能
+wire do_write = ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg);
+wire [31:0] current_waddr = aw_fire ? awaddr : awaddr_reg;
+wire [31:0] current_wdata = w_fire ? wdata : wdata_reg;
+wire [ 3:0] current_wstrb = w_fire ? wstrb : wstrb_reg;
 
 // ----------------------------------------
-// 5. MMIO 串口逻辑处理
+// 5. 内存统一路由与物理 SRAM 控制
 // ----------------------------------------
-// CPU 写入 UART 数据 (0x1f000000)
+wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
+wire        mem_we   = do_write;
+wire        mem_re   = rvalid_reg; 
+
+wire is_base = (mem_addr[31:22] == 10'h070); 
+wire is_ext  = (mem_addr[31:22] == 10'h071); 
+wire is_uart = (mem_addr[31:20] == 12'h1f0); 
+
+// BaseRAM
+assign base_ram_ce_n = ~(is_base && (mem_re || mem_we));
+assign base_ram_we_n = ~(is_base && mem_we);
+assign base_ram_oe_n = ~(is_base && mem_re && !mem_we);
+assign base_ram_be_n =  (is_base && mem_we) ? ~current_wstrb : 4'b0000;
+assign base_ram_addr =  mem_addr[21:2];
+assign base_ram_data =  (is_base && mem_we) ? current_wdata : 32'bz;
+
+// ExtRAM
+assign ext_ram_ce_n  = ~(is_ext && (mem_re || mem_we));
+assign ext_ram_we_n  = ~(is_ext && mem_we);
+assign ext_ram_oe_n  = ~(is_ext && mem_re && !mem_we);
+assign ext_ram_be_n  =  (is_ext && mem_we) ? ~current_wstrb : 4'b0000;
+assign ext_ram_addr  =  mem_addr[21:2];
+assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
+
+// ----------------------------------------
+// 6. MMIO 串口逻辑处理
+// ----------------------------------------
 always @(posedge clk_10M) begin
     if(reset_of_clk10M) begin
         ext_uart_start <= 0;
         ext_uart_tx    <= 0;
     end else begin
-        if (cpu_data_en && data_is_uart && (cpu_data_wen != 0) && cpu_data_addr[7:0] == 8'h00) begin
-            ext_uart_tx    <= cpu_data_wdata[7:0];
+        if (is_uart && do_write && mem_addr[7:0] == 8'h00) begin
+            ext_uart_tx    <= current_wdata[7:0];
             ext_uart_start <= 1;
         end else begin
             ext_uart_start <= 0;
@@ -189,7 +282,6 @@ always @(posedge clk_10M) begin
     end
 end
 
-// CPU 读取 UART 及状态清零
 always @(posedge clk_10M) begin
     if(reset_of_clk10M) begin
         ext_uart_avai   <= 0;
@@ -198,30 +290,22 @@ always @(posedge clk_10M) begin
         if (ext_uart_ready) begin
             ext_uart_buffer <= ext_uart_rx;
             ext_uart_avai   <= 1;
-        // 当CPU发出读请求且地址为数据寄存器时，清空“可用”标志位
-        end else if (cpu_data_en && data_is_uart && (cpu_data_wen == 0) && cpu_data_addr[7:0] == 8'h00) begin
+        end else if (is_uart && mem_re && !mem_we && mem_addr[7:0] == 8'h00) begin
             ext_uart_avai   <= 0; 
         end
     end
 end
 
-// 数据读取数据 MUX (RAM 与 MMIO) 返回给 CPU
-always @(*) begin
-    cpu_data_rdata = 32'd0;
-    if (cpu_data_en && data_is_base) begin
-        cpu_data_rdata = base_ram_data;
-    end else if (cpu_data_en && data_is_ext) begin
-        cpu_data_rdata = ext_ram_data;
-    end else if (cpu_data_en && data_is_uart) begin
-        if (cpu_data_addr[7:0] == 8'h05)      // 读 UART_STATUS
-            cpu_data_rdata = {26'd0, !ext_uart_busy, 4'd0, ext_uart_avai}; // Bit5=TX_RDY, Bit0=RX_RDY
-        else if (cpu_data_addr[7:0] == 8'h00) // 读 UART_DATA
-            cpu_data_rdata = {24'd0, ext_uart_buffer};
-    end
-end
+// 读数据返回总线 (直接投递到 AXI R 通道)
+assign rdata = is_base ? base_ram_data :
+               is_ext  ? ext_ram_data  :
+               is_uart ? (
+                   (mem_addr[7:0] == 8'h05) ? {26'd0, !ext_uart_busy, 4'd0, ext_uart_avai} : 
+                   (mem_addr[7:0] == 8'h00) ? {24'd0, ext_uart_buffer} : 32'd0
+               ) : 32'd0;
 
 // ----------------------------------------
-// 6. 其他外设禁用及默认设置
+// 7. 其他外设禁用及默认设置
 // ----------------------------------------
 assign flash_rp_n   = 1'b1;
 assign flash_vpen   = 1'b1;

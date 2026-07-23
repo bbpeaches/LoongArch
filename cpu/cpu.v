@@ -1,18 +1,35 @@
 module cpu(
     input           clk, resetn,
-    input           inst_sram_wait, 
-    // Inst SRAM
-    output          inst_sram_en,
+    
+    // ==========================================
+    // Inst SRAM (类SRAM握手接口)
+    // ==========================================
+    output          inst_sram_req,
+    output          inst_sram_wr,
+    output [ 1:0]   inst_sram_size,
     output [31:0]   inst_sram_addr,
+    output [ 3:0]   inst_sram_wstrb,
+    output [31:0]   inst_sram_wdata,
+    input           inst_sram_addr_ok,
+    input           inst_sram_data_ok,
     input  [31:0]   inst_sram_rdata,
-    // Data SRAM
-    output          data_sram_en,
-    output [ 3:0]   data_sram_wen,
+    
+    // ==========================================
+    // Data SRAM (类SRAM握手接口)
+    // ==========================================
+    output          data_sram_req,
+    output          data_sram_wr,
+    output [ 1:0]   data_sram_size,
     output [31:0]   data_sram_addr,
+    output [ 3:0]   data_sram_wstrb,
     output [31:0]   data_sram_wdata,
+    input           data_sram_addr_ok,
+    input           data_sram_data_ok,
     input  [31:0]   data_sram_rdata,
-    input           data_sram_resp_valid,
-    // Debug
+    
+    // ==========================================
+    // Debug 接口
+    // ==========================================
     output [31:0]   debug_wb_pc,
     output          debug_wb_rf_wen,
     output [ 4:0]   debug_wb_rf_wnum,
@@ -22,11 +39,80 @@ module cpu(
     wire [4:0] flush;
 
     // ==========================================
+    // 取指类SRAM握手转接与缓存逻辑
+    // ==========================================
+    wire        internal_inst_en;
+    wire [31:0] internal_inst_addr;
+    wire        inst_sram_wait;
+
+    reg inst_addr_rcv;
+    always @(posedge clk) begin
+        if (~resetn || flush[1]) begin
+            inst_addr_rcv <= 1'b0;
+        end else if ((inst_sram_req && inst_sram_addr_ok) && !inst_sram_data_ok) begin
+            inst_addr_rcv <= 1'b1;
+        end else if (inst_sram_data_ok) begin
+            inst_addr_rcv <= 1'b0;
+        end
+    end
+
+    reg         inst_buf_valid;
+    reg  [31:0] inst_buf_data;
+    reg  [31:0] inst_buf_pc;
+    reg         inst_buf_pred_taken;
+    reg  [31:0] inst_buf_pred_target;
+    reg  [7:0]  inst_buf_pred_ghr;
+
+    assign inst_sram_req   = internal_inst_en & ~inst_addr_rcv & ~inst_buf_valid;
+    assign inst_sram_wr    = 1'b0;       
+    assign inst_sram_size  = 2'b10;      
+    assign inst_sram_wstrb = 4'b0000;
+    assign inst_sram_addr  = internal_inst_addr;
+    assign inst_sram_wdata = 32'd0;
+
+    assign inst_sram_wait  = internal_inst_en & ~inst_sram_data_ok & ~inst_buf_valid;
+
+    // ==========================================
+    // 访存类SRAM握手转接逻辑
+    // ==========================================
+    wire        internal_data_en;
+    wire [ 3:0] internal_data_wen;
+    wire [31:0] internal_data_addr;
+    wire [31:0] internal_data_wdata;
+    wire        mem_wait;
+
+    reg data_addr_rcv;
+    always @(posedge clk) begin
+        if (~resetn) begin
+            data_addr_rcv <= 1'b0;
+        end else if ((data_sram_req && data_sram_addr_ok) && !data_sram_data_ok) begin
+            data_addr_rcv <= 1'b1;
+        end else if (data_sram_data_ok) begin
+            data_addr_rcv <= 1'b0;
+        end
+    end
+
+    wire is_data_write = (internal_data_wen != 4'b0000);
+
+    assign data_sram_req   = internal_data_en & ~data_addr_rcv;
+    assign data_sram_wr    = is_data_write;
+    assign data_sram_size  = (internal_data_wen == 4'b0001 || internal_data_wen == 4'b0010 || 
+                              internal_data_wen == 4'b0100 || internal_data_wen == 4'b1000) ? 2'b00 : 
+                             (internal_data_wen == 4'b0011 || internal_data_wen == 4'b1100) ? 2'b01 : 
+                             2'b10; 
+
+    assign data_sram_wstrb = is_data_write ? internal_data_wen : 4'b0000;
+    assign data_sram_addr  = internal_data_addr;
+    assign data_sram_wdata = internal_data_wdata;
+
+    assign mem_wait = internal_data_en & ~data_sram_data_ok;
+
+    // ==========================================
     // 分支预测单元
     // ==========================================
     wire        if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
-    wire [7:0] if_pred_ghr, id_pred_ghr;
+    wire [7:0]  if_pred_ghr, id_pred_ghr;
     wire        upd_bpu_en, upd_bpu_taken;
     wire [ 1:0] upd_bpu_br_type;
     wire [7:0]  upd_bpu_ghr;
@@ -57,65 +143,38 @@ module cpu(
         .clk(clk), .resetn(resetn), .stall_if(stall[0]),
         .id_pred_wrong(id_br_taken), .id_correct_pc(id_br_target),
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
-        .inst_sram_en(inst_sram_en), .inst_sram_addr(inst_sram_addr), .if_pc(if_pc), .if_req_fire(if_req_fire)
+        .inst_sram_en(internal_inst_en),       
+        .inst_sram_addr(internal_inst_addr),   
+        .if_pc(if_pc), .if_req_fire(if_req_fire)
     );
-
-    reg  [31:0] req_pc_d, req_pred_target_d;
-    reg  [7:0]  req_pred_ghr_d;
-    reg         req_pred_taken_d, req_valid_d;
-    reg  [31:0] stalled_pc, stalled_inst, stalled_pred_target;
-    reg  [7:0]  stalled_pred_ghr;
-    reg         stalled_pred_taken, is_stalled;
-
-    wire [31:0] resp_pc          = req_pc_d;
-    wire [31:0] resp_inst        = inst_sram_rdata;
-    wire        resp_pred_taken  = req_pred_taken_d;
-    wire [31:0] resp_pred_target = req_pred_target_d;
-    wire [7:0]  resp_pred_ghr    = req_pred_ghr_d;
 
     always @(posedge clk) begin
         if (~resetn || flush[1]) begin
-            req_pc_d            <= 32'd0;
-            req_pred_target_d   <= 32'd0;
-            req_pred_ghr_d      <= 8'd0;
-            req_pred_taken_d    <= 1'b0;
-            req_valid_d         <= 1'b0;
-            stalled_pc          <= 32'd0;
-            stalled_inst        <= 32'h03400000;
-            stalled_pred_target <= 32'd0;
-            stalled_pred_ghr    <= 8'd0;
-            stalled_pred_taken  <= 1'b0;
-            is_stalled          <= 1'b0;
+            inst_buf_valid <= 1'b0;
         end else begin
-            req_valid_d <= if_req_fire;
-            if (if_req_fire) begin
-                req_pc_d          <= if_pc;
-                req_pred_taken_d  <= if_pred_taken;
-                req_pred_target_d <= if_pred_target;
-                req_pred_ghr_d    <= if_pred_ghr;
-            end
-
-            if (stall[1] && req_valid_d && !is_stalled) begin
-                stalled_pc          <= resp_pc;
-                stalled_inst        <= resp_inst;
-                stalled_pred_taken  <= resp_pred_taken;
-                stalled_pred_target <= resp_pred_target;
-                stalled_pred_ghr    <= resp_pred_ghr;
-                is_stalled          <= 1'b1;
-            end else if (!stall[1] && is_stalled) begin
-                is_stalled <= 1'b0;
+            if (inst_sram_data_ok && stall[1]) begin
+                inst_buf_valid       <= 1'b1;
+                inst_buf_data        <= inst_sram_rdata;
+                inst_buf_pc          <= if_pc;           // <--- 直接保存当前完全正确的 if_pc
+                inst_buf_pred_taken  <= if_pred_taken;
+                inst_buf_pred_target <= if_pred_target;
+                inst_buf_pred_ghr    <= if_pred_ghr;
+            end else if (!stall[1]) begin
+                inst_buf_valid <= 1'b0;
             end
         end
     end
 
     wire [31:0] id_pc, id_inst;
     wire        id_valid;
-    wire        if_id_valid_in       = is_stalled ? 1'b1 : req_valid_d;
-    wire [31:0] if_id_pc_in          = is_stalled ? stalled_pc          : resp_pc;
-    wire [31:0] if_id_inst_in        = is_stalled ? stalled_inst        : resp_inst;
-    wire        if_id_pred_taken_in  = is_stalled ? stalled_pred_taken  : resp_pred_taken;
-    wire [31:0] if_id_pred_target_in  = is_stalled ? stalled_pred_target : resp_pred_target;
-    wire [7:0]  if_id_pred_ghr_in    = is_stalled ? stalled_pred_ghr    : resp_pred_ghr;
+    
+    // 流入 ID 级的数据，优先看缓存，其次直接使用总线数据和当前的 if_pc
+    wire        if_id_valid_in       = inst_buf_valid ? 1'b1                 : inst_sram_data_ok;
+    wire [31:0] if_id_pc_in          = inst_buf_valid ? inst_buf_pc          : if_pc;          // <--- 解决错位的杀手锏
+    wire [31:0] if_id_inst_in        = inst_buf_valid ? inst_buf_data        : inst_sram_rdata;
+    wire        if_id_pred_taken_in  = inst_buf_valid ? inst_buf_pred_taken  : if_pred_taken;
+    wire [31:0] if_id_pred_target_in = inst_buf_valid ? inst_buf_pred_target : if_pred_target;
+    wire [7:0]  if_id_pred_ghr_in    = inst_buf_valid ? inst_buf_pred_ghr    : if_pred_ghr;
 
     if_id_reg _if_id_reg (
         .clk(clk), .resetn(resetn), .stall(stall[1]), .flush(flush[1]), .if_valid(if_id_valid_in),
@@ -184,8 +243,10 @@ module cpu(
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
         .ex_result(ex_result), .ex_addr_align(ex_addr_align),
-        .data_sram_en(data_sram_en), .data_sram_wen(data_sram_wen),
-        .data_sram_addr(data_sram_addr), .data_sram_wdata(data_sram_wdata),
+        .data_sram_en(internal_data_en),       
+        .data_sram_wen(internal_data_wen),     
+        .data_sram_addr(internal_data_addr),   
+        .data_sram_wdata(internal_data_wdata), 
         .ex_mem_read(ex_mem_read)
     );
 
@@ -206,14 +267,15 @@ module cpu(
     // ==========================================
     // MEM 阶段
     // ==========================================
-    wire mem_done, mem_wait;
+    wire mem_done;
 
     stage_mem _stage_mem (
         .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b), 
         .mem_is_ld_bu(mem_is_ld_bu), 
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid),
-        .data_sram_rdata(data_sram_rdata), .data_sram_resp_valid(data_sram_resp_valid),
-        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait(mem_wait)
+        .data_sram_rdata(data_sram_rdata),              
+        .data_sram_resp_valid(data_sram_data_ok),       
+        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait() 
     );
 
     wire [31:0] wb_pc;
@@ -239,8 +301,8 @@ module cpu(
         .id_is_branch(id_is_branch), .id_rs1(id_rs1), .id_rs2(id_rs2),
         .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read),
         .id_br_taken(id_br_taken),
-        .if_wait(inst_sram_wait),
-        .mem_wait(mem_wait),
+        .if_wait(inst_sram_wait),  
+        .mem_wait(mem_wait),       
         .stall(stall), .flush(flush)
     );
 
