@@ -158,30 +158,77 @@ mycpu_top u_cpu (
 // ----------------------------------------
 // 4. AXI 从机转换逻辑 (将 AXI 转为 SRAM 时序)
 // ----------------------------------------
-// --- 读通道 (AR & R) ---
+
+// --- 读写互斥状态机 (保护单端口 SRAM) ---
+reg [1:0] slave_state;
+localparam S_IDLE  = 2'd0;
+localparam S_READ  = 2'd1;
+localparam S_WRITE = 2'd2;
+
+always @(posedge clk_10M) begin
+    if (!cpu_resetn) begin
+        slave_state <= S_IDLE;
+    end else begin
+        case (slave_state)
+            S_IDLE: begin
+                if (arvalid) slave_state <= S_READ;
+                else if (awvalid || wvalid) slave_state <= S_WRITE;
+            end
+            S_READ: begin
+                if (rvalid && rready && rlast) slave_state <= S_IDLE;
+            end
+            S_WRITE: begin
+                if (bvalid && bready) slave_state <= S_IDLE;
+            end
+        endcase
+    end
+end
+
+wire is_read  = (slave_state == S_READ)  || (slave_state == S_IDLE && arvalid);
+wire is_write = (slave_state == S_WRITE) || (slave_state == S_IDLE && !arvalid && (awvalid || wvalid));
+
+// --- 读通道 (AR & R) 支持 Burst ---
 reg rvalid_reg;
 reg [31:0] raddr_reg;
 reg [3:0]  rid_reg;
+reg [7:0]  rlen_reg;
+reg [1:0]  rburst_reg;
+reg [7:0]  rbeat_cnt;
 
+assign arready = is_read && !rvalid_reg;
 wire read_fire = arvalid && arready;
 
 always @(posedge clk_10M) begin
     if (!cpu_resetn) begin
         rvalid_reg <= 0;
+        rbeat_cnt  <= 0;
     end else if (read_fire) begin
         rvalid_reg <= 1;
-        raddr_reg <= araddr;
-        rid_reg <= arid;
+        raddr_reg  <= araddr;
+        rid_reg    <= arid;
+        rlen_reg   <= arlen;
+        rburst_reg <= arburst;
+        rbeat_cnt  <= 8'd0;
     end else if (rvalid && rready) begin
-        rvalid_reg <= 0;
+        if (rbeat_cnt == rlen_reg) begin
+            rvalid_reg <= 0;
+        end else begin
+            rbeat_cnt <= rbeat_cnt + 8'd1;
+            if (rburst_reg == 2'b10) begin
+                // WRAP 模式：在 32 字节边界内回环 (对应位 [4:2])
+                raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
+            end else begin
+                // INCR 模式 (用于 Data SRAM 等)：顺序累加 4
+                raddr_reg <= raddr_reg + 32'd4;
+            end
+        end
     end
 end
 
-assign arready = !rvalid_reg; 
-assign rvalid  = rvalid_reg;
-assign rlast   = 1'b1;
-assign rresp   = 2'b0;
-assign rid     = rid_reg;
+assign rvalid = rvalid_reg;
+assign rlast  = (rbeat_cnt == rlen_reg);
+assign rresp  = 2'b0;
+assign rid    = rid_reg;
 
 wire [31:0] current_raddr = read_fire ? araddr : raddr_reg;
 
@@ -193,6 +240,8 @@ reg [ 3:0] wstrb_reg;
 reg [ 3:0] bid_reg;
 reg bvalid_reg;
 
+assign awready = is_write && !aw_recvd && !bvalid_reg;
+assign wready  = is_write && !w_recvd  && !bvalid_reg;
 wire aw_fire = awvalid && awready;
 wire w_fire  = wvalid && wready;
 
@@ -217,7 +266,6 @@ always @(posedge clk_10M) begin
             wstrb_reg <= wstrb;
         end
         
-        // 当地址和数据均收到，执行物理写操作，并响应 B 通道
         if ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg) begin
             bvalid_reg <= 1;
             aw_recvd <= 0;
@@ -226,13 +274,10 @@ always @(posedge clk_10M) begin
     end
 end
 
-assign awready = !aw_recvd && !bvalid_reg;
-assign wready  = !w_recvd && !bvalid_reg;
-assign bvalid  = bvalid_reg;
-assign bresp   = 2'b0;
-assign bid     = bid_reg;
+assign bvalid = bvalid_reg;
+assign bresp  = 2'b0;
+assign bid    = bid_reg;
 
-// 物理层执行使能
 wire do_write = ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg);
 wire [31:0] current_waddr = aw_fire ? awaddr : awaddr_reg;
 wire [31:0] current_wdata = w_fire ? wdata : wdata_reg;
