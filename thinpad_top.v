@@ -177,7 +177,7 @@ always @(posedge clk_10M) begin
     end
 end
 
-assign arready = (!rvalid_reg || (rvalid && rready)); 
+assign arready = !rvalid_reg; 
 assign rvalid  = rvalid_reg;
 assign rlast   = 1'b1;
 assign rresp   = 2'b0;

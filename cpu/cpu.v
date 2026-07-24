@@ -283,6 +283,12 @@ module cpu(
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid)
     );
 
+    reg [31:0] data_rdata_buf;
+    always @(posedge clk) begin
+        if (data_sram_data_ok) begin
+            data_rdata_buf <= data_sram_rdata;
+        end
+    end
     // ==========================================
     // MEM 阶段
     // ==========================================
@@ -292,8 +298,8 @@ module cpu(
         .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b), 
         .mem_is_ld_bu(mem_is_ld_bu), 
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid),
-        .data_sram_rdata(data_sram_rdata),              
-        .data_sram_resp_valid(data_sram_data_ok),       
+        .data_sram_rdata(data_rdata_buf),             
+        .data_sram_resp_valid(1'b1),                 
         .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait() 
     );
 

@@ -128,9 +128,10 @@ module stage_id (
     wire [31:0] actual_target = id_invalid ? 32'd0 : ((is_jirl ? id_fwd_rdata1 : id_pc) + id_imm);
     wire [31:0] actual_next_pc = actual_taken ? actual_target : (id_pc + 32'd4);
 
-    wire pred_wrong = id_is_branch && (
-                      (actual_taken != id_pred_taken) ||
-                      (actual_taken && (actual_target != id_pred_target)) );
+    // 只要预测要跳，但实际不该跳；或者实际该跳，预测没跳或跳错地址，都是误预测。
+    wire pred_wrong = (id_pred_taken && !actual_taken) || 
+                  (actual_taken && !id_pred_taken) || 
+                  (actual_taken && (actual_target != id_pred_target));
 
     assign id_br_taken  = pred_wrong && !stall_id;
     assign id_br_target = actual_next_pc;
