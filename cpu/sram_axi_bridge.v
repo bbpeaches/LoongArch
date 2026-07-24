@@ -5,17 +5,16 @@ module sram_axi_bridge(
     input  wire        resetn,
 
     // ==========================================
-    // Inst SRAM-like (来自 CPU 取指)
+    // I-Cache AXI 接口 (AR & R)
     // ==========================================
-    input  wire        inst_req,
-    input  wire        inst_wr,
-    input  wire [ 1:0] inst_size,
-    input  wire [31:0] inst_addr,
-    input  wire [ 3:0] inst_wstrb,
-    input  wire [31:0] inst_wdata,
-    output wire        inst_addr_ok,
-    output wire        inst_data_ok,
-    output wire [31:0] inst_rdata,
+    input  wire [31:0] icache_araddr,
+    input  wire        icache_arvalid,
+    output wire        icache_arready,
+    
+    output wire [31:0] icache_rdata,
+    output wire        icache_rlast,
+    output wire        icache_rvalid,
+    input  wire        icache_rready,
 
     // ==========================================
     // Data SRAM-like (来自 CPU 访存)
@@ -33,7 +32,6 @@ module sram_axi_bridge(
     // ==========================================
     // AXI 接口 (对接外部 SoC)
     // ==========================================
-    // AR Channel (读请求)
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
     output wire [ 7:0] arlen,
@@ -44,14 +42,14 @@ module sram_axi_bridge(
     output wire [ 2:0] arprot,
     output wire        arvalid,
     input  wire        arready,
-    // R Channel (读响应)
+    
     input  wire [ 3:0] rid,
     input  wire [31:0] rdata,
     input  wire [ 1:0] rresp,
     input  wire        rlast,
     input  wire        rvalid,
     output wire        rready,
-    // AW Channel (写请求)
+    
     output wire [ 3:0] awid,
     output wire [31:0] awaddr,
     output wire [ 7:0] awlen,
@@ -62,14 +60,14 @@ module sram_axi_bridge(
     output wire [ 2:0] awprot,
     output wire        awvalid,
     input  wire        awready,
-    // W Channel (写数据)
+    
     output wire [ 3:0] wid,
     output wire [31:0] wdata,
     output wire [ 3:0] wstrb,
     output wire        wlast,
     output wire        wvalid,
     input  wire        wready,
-    // B Channel (写响应)
+    
     input  wire [ 3:0] bid,
     input  wire [ 1:0] bresp,
     input  wire        bvalid,
@@ -77,17 +75,11 @@ module sram_axi_bridge(
 );
 
     // ==========================================
-    // 1. AR 通道（读请求）: 2x1 仲裁 (Data 优先)
+    // 1. AR 通道（读请求）: 仲裁 (Data 优先)
     // ==========================================
-    reg inst_ar_acc;
-    always @(posedge clk) begin
-        if(!resetn) inst_ar_acc <= 0;
-        else if(inst_addr_ok && inst_req && !inst_wr && !inst_data_ok) inst_ar_acc <= 1;
-        else if(inst_data_ok) inst_ar_acc <= 0;
-    end
-
     wire data_r_data_ok = rvalid && rready && (rid == 4'd1);
     reg data_ar_acc;
+    
     always @(posedge clk) begin
         if(!resetn) data_ar_acc <= 0;
         else if(data_addr_ok && data_req && !data_wr && !data_r_data_ok) data_ar_acc <= 1;
@@ -95,39 +87,46 @@ module sram_axi_bridge(
     end
 
     wire do_data_ar = data_req && !data_wr && !data_ar_acc;
-    wire do_inst_ar = inst_req && !inst_wr && !inst_ar_acc;
 
     // 协议保障：确保 arvalid 即使遇到 CPU flush 撤销请求，也能保持拉高直到 arready
     reg holding_ar;
     reg [3:0]  held_arid;
     reg [31:0] held_araddr;
     reg [2:0]  held_arsize;
+    reg [7:0]  held_arlen;
+    reg [1:0]  held_arburst;
 
     always @(posedge clk) begin
         if(!resetn) holding_ar <= 0;
         else if(arvalid && arready) holding_ar <= 0;
         else if(arvalid && !arready) begin
-            holding_ar  <= 1;
-            held_arid   <= arid;
-            held_araddr <= araddr;
-            held_arsize <= arsize;
+            holding_ar   <= 1;
+            held_arid    <= arid;
+            held_araddr  <= araddr;
+            held_arsize  <= arsize;
+            held_arlen   <= arlen;
+            held_arburst <= arburst;
         end
     end
 
-    assign arvalid = holding_ar ? 1'b1 : (do_data_ar || do_inst_ar);
-    assign arid    = holding_ar ? held_arid   : (do_data_ar ? 4'd1 : 4'd0);
-    assign araddr  = holding_ar ? held_araddr : (do_data_ar ? data_addr : inst_addr);
-    assign arsize  = holding_ar ? held_arsize : (do_data_ar ? {1'b0, data_size} : {1'b0, inst_size});
-    assign arlen   = 8'd0;
-    assign arburst = 2'b01; // INCR
+    assign arvalid = holding_ar ? 1'b1 : (do_data_ar || icache_arvalid);
+    assign arid    = holding_ar ? held_arid    : (do_data_ar ? 4'd1 : 4'd0);
+    assign araddr  = holding_ar ? held_araddr  : (do_data_ar ? data_addr : icache_araddr);
+    assign arsize  = holding_ar ? held_arsize  : (do_data_ar ? {1'b0, data_size} : 3'd2);
+    // I-Cache 发起 8 次读突发 (arlen=7)，Data 依然是单次读 (arlen=0)
+    assign arlen   = holding_ar ? held_arlen   : (do_data_ar ? 8'd0 : 8'd7);
+    // I-Cache 使用 WRAP 回环模式 (2'b10)，Data 使用 INCR (2'b01)
+    assign arburst = holding_ar ? held_arburst : (do_data_ar ? 2'b01 : 2'b10);
+    
     assign arlock  = 2'd0;
     assign arcache = 4'd0;
     assign arprot  = 3'd0;
 
-    assign inst_addr_ok = arvalid && arready && (arid == 4'd0);
-    
+    assign icache_arready = !holding_ar && !do_data_ar && arready;
+    wire data_ar_ready_internal = !holding_ar && do_data_ar && arready;
+
     // ==========================================
-    // 2. AW & W 通道（写请求与写数据）
+    // 2. AW & W 通道（写请求与写数据）: 仅供 Data SRAM 使用
     // ==========================================
     wire data_req_w = data_req && data_wr;
 
@@ -185,7 +184,6 @@ module sram_axi_bridge(
     assign wid     = 4'd1;
     assign wlast   = 1'b1;
 
-    // 当 AW 和 W 均被 AXI 总线接收时，才向 CPU 反馈 data_addr_ok
     wire write_addr_ok = (awvalid && awready && w_sent) ||
                          (wvalid && wready && aw_sent) ||
                          (awvalid && awready && wvalid && wready);
@@ -195,11 +193,13 @@ module sram_axi_bridge(
     // ==========================================
     // 3. R & B 通道（响应处理）
     // ==========================================
-    assign rready = 1'b1; 
+    // 当返回数据属于 I-Cache 时交由 I-Cache 决定 rready，Data 默认随时可接收
+    assign rready = (rvalid && rid == 4'd0) ? icache_rready : 1'b1; 
     assign bready = 1'b1;
 
-    assign inst_data_ok = rvalid && (rid == 4'd0);
-    assign inst_rdata   = rdata;
+    assign icache_rdata  = rdata;
+    assign icache_rlast  = rlast;
+    assign icache_rvalid = rvalid && (rid == 4'd0);
 
     assign data_data_ok = (rvalid && (rid == 4'd1)) || (bvalid && (bid == 4'd1));
     assign data_rdata   = rdata;

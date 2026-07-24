@@ -5,7 +5,6 @@ module mycpu_top(
     // ==========================================
     // AXI 接口
     // ==========================================
-    // read req channel
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
     output wire [ 7:0] arlen,
@@ -16,14 +15,14 @@ module mycpu_top(
     output wire [ 2:0] arprot,
     output wire        arvalid,
     input  wire        arready,
-    // read response channel
+    
     input  wire [ 3:0] rid,
     input  wire [31:0] rdata,
     input  wire [ 1:0] rresp,
     input  wire        rlast,
     input  wire        rvalid,
     output wire        rready,
-    // write req channel
+    
     output wire [ 3:0] awid,
     output wire [31:0] awaddr,
     output wire [ 7:0] awlen,
@@ -34,14 +33,14 @@ module mycpu_top(
     output wire [ 2:0] awprot,
     output wire        awvalid,
     input  wire        awready,
-    // write data channel
+    
     output wire [ 3:0] wid,
     output wire [31:0] wdata,
     output wire [ 3:0] wstrb,
     output wire        wlast,
     output wire        wvalid,
     input  wire        wready,
-    // write response channel
+    
     input  wire [ 3:0] bid,
     input  wire [ 1:0] bresp,
     input  wire        bvalid,
@@ -57,18 +56,16 @@ module mycpu_top(
 );
 
     // ==========================================
-    // 内部类 SRAM 握手信号互联
+    // 内部连线
     // ==========================================
+    // CPU 的取指 SRAM 接口信号
     wire        inst_sram_req;
-    wire        inst_sram_wr;
-    wire [ 1:0] inst_sram_size;
     wire [31:0] inst_sram_addr;
-    wire [ 3:0] inst_sram_wstrb;
-    wire [31:0] inst_sram_wdata;
     wire        inst_sram_addr_ok;
     wire        inst_sram_data_ok;
     wire [31:0] inst_sram_rdata;
 
+    // CPU 的访存 SRAM 接口信号
     wire        data_sram_req;
     wire        data_sram_wr;
     wire [ 1:0] data_sram_size;
@@ -79,24 +76,32 @@ module mycpu_top(
     wire        data_sram_data_ok;
     wire [31:0] data_sram_rdata;
 
+    // I-Cache 的 AXI 接口信号
+    wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
+    wire [31:0] icache_araddr, icache_rdata;
+
     wire        debug_wb_rf_wen_1bit;
-    // 统一拓展 debug 位宽给 testbench 用
     assign debug_wb_rf_we = {4{debug_wb_rf_wen_1bit}};
 
+    // ==========================================
+    // 实例化 CPU 核心
+    // ==========================================
     cpu u_cpu (
         .clk                (aclk),
         .resetn             (aresetn),
 
+        // 取指连线：直接连到下方的 icache
         .inst_sram_req      (inst_sram_req),
-        .inst_sram_wr       (inst_sram_wr),
-        .inst_sram_size     (inst_sram_size),
+        .inst_sram_wr       (), // I-Cache 忽略写信号
+        .inst_sram_size     (),
         .inst_sram_addr     (inst_sram_addr),
-        .inst_sram_wstrb    (inst_sram_wstrb),
-        .inst_sram_wdata    (inst_sram_wdata),
+        .inst_sram_wstrb    (),
+        .inst_sram_wdata    (),
         .inst_sram_addr_ok  (inst_sram_addr_ok),
         .inst_sram_data_ok  (inst_sram_data_ok),
         .inst_sram_rdata    (inst_sram_rdata),
 
+        // 访存连线：连到下方的 u_bridge
         .data_sram_req      (data_sram_req),
         .data_sram_wr       (data_sram_wr),
         .data_sram_size     (data_sram_size),
@@ -113,21 +118,48 @@ module mycpu_top(
         .debug_wb_rf_wdata  (debug_wb_rf_wdata)
     );
 
-    // 实例化 2x1 的 SRAM-to-AXI 转接桥
+    // ==========================================
+    // 实例化 I-Cache
+    // ==========================================
+    icache u_icache (
+        .clk            (aclk),
+        .resetn         (aresetn),
+        // 对内：SRAM-Like 接口，对接 CPU 取指
+        .cpu_req        (inst_sram_req),
+        .cpu_addr       (inst_sram_addr),
+        .cache_rdata    (inst_sram_rdata),
+        .cache_addr_ok  (inst_sram_addr_ok),
+        .cache_data_ok  (inst_sram_data_ok),
+        
+        // 对外：AXI 接口，对接总线桥
+        .arid           (), // 桥强制配置为 0
+        .araddr         (icache_araddr),
+        .arvalid        (icache_arvalid),
+        .arready        (icache_arready),
+        .rid            (4'd0),
+        .rdata          (icache_rdata),
+        .rlast          (icache_rlast),
+        .rvalid         (icache_rvalid),
+        .rready         (icache_rready)
+    );
+
+    // ==========================================
+    // 实例化 AXI 仲裁桥 (I-Cache AXI + Data SRAM -> SoC AXI)
+    // ==========================================
     sram_axi_bridge u_bridge (
         .clk                (aclk),
         .resetn             (aresetn),
 
-        .inst_req           (inst_sram_req),
-        .inst_wr            (inst_sram_wr),
-        .inst_size          (inst_sram_size),
-        .inst_addr          (inst_sram_addr),
-        .inst_wstrb         (inst_sram_wstrb),
-        .inst_wdata         (inst_sram_wdata),
-        .inst_addr_ok       (inst_sram_addr_ok),
-        .inst_data_ok       (inst_sram_data_ok),
-        .inst_rdata         (inst_sram_rdata),
+        // 接入 I-Cache 的 AXI 接口
+        .icache_araddr      (icache_araddr),
+        .icache_arvalid     (icache_arvalid),
+        .icache_arready     (icache_arready),
+        .icache_rdata       (icache_rdata),
+        .icache_rlast       (icache_rlast),
+        .icache_rvalid      (icache_rvalid),
+        .icache_rready      (icache_rready),
 
+        // 接入 Data 的 SRAM 接口
         .data_req           (data_sram_req),
         .data_wr            (data_sram_wr),
         .data_size          (data_sram_size),
