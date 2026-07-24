@@ -52,7 +52,7 @@ module thinpad_top(
 /* =========== Core Logic Begin =========== */
 
 // ----------------------------------------
-// 1. 时钟与复位生成 (维持 10MHz 不变)
+// 1. 时钟与复位生成
 // ----------------------------------------
 wire locked, clk_10M, clk_20M;
 pll_example clock_gen (
@@ -79,16 +79,16 @@ reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(10000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
     .clk(clk_10M), 
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
     .RxD_clear(ext_uart_clear),
     .RxD_data(ext_uart_rx)
 );
-assign ext_uart_clear = ext_uart_ready; 
 
-async_transmitter #(.ClkFrequency(10000000), .Baud(115200)) ext_uart_t (
+assign ext_uart_clear = ext_uart_ready; 
+async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
     .clk(clk_10M), 
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
@@ -268,12 +268,19 @@ assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
 // ----------------------------------------
 // 6. MMIO 串口逻辑处理
 // ----------------------------------------
+reg uart_dlab;
+
 always @(posedge clk_10M) begin
     if(reset_of_clk10M) begin
         ext_uart_start <= 0;
         ext_uart_tx    <= 0;
+        uart_dlab      <= 0;
     end else begin
-        if (is_uart && do_write && mem_addr[7:0] == 8'h00) begin
+        if (is_uart && do_write && mem_addr[7:0] == 8'h03) begin
+            uart_dlab <= current_wdata[7];
+        end
+        
+        if (is_uart && do_write && mem_addr[7:0] == 8'h00 && !uart_dlab) begin
             ext_uart_tx    <= current_wdata[7:0];
             ext_uart_start <= 1;
         end else begin
@@ -296,12 +303,14 @@ always @(posedge clk_10M) begin
     end
 end
 
-// 读数据返回总线 (直接投递到 AXI R 通道)
+wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
+
+// 读数据返回总线
 assign rdata = is_base ? base_ram_data :
                is_ext  ? ext_ram_data  :
                is_uart ? (
-                   (mem_addr[7:0] == 8'h05) ? {26'd0, !ext_uart_busy, 4'd0, ext_uart_avai} : 
-                   (mem_addr[7:0] == 8'h00) ? {24'd0, ext_uart_buffer} : 32'd0
+                   (mem_addr[7:2] == 6'h01) ? {4{uart_status}} : 
+                   (mem_addr[7:2] == 6'h00) ? {24'd0, ext_uart_buffer} : 32'd0
                ) : 32'd0;
 
 // ----------------------------------------

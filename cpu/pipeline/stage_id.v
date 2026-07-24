@@ -139,7 +139,7 @@ module stage_id (
     wire is_call = is_bl | (is_jirl & (id_waddr_raw == 5'd1));
     wire is_ret  = is_jirl & (dec_rs1 == 5'd1) & (id_waddr_raw == 5'd0);
 
-    assign upd_bpu_en      = id_is_branch && !stall_id;
+    assign upd_bpu_en      = (id_is_branch || id_pred_taken) && !stall_id;
     assign upd_bpu_pc      = id_pc;
     assign upd_bpu_ghr     = id_pred_ghr;
     assign upd_bpu_br_type_out = is_call ? 2'b10 :
