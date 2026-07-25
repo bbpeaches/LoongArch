@@ -1,15 +1,15 @@
 module thinpad_top(
-    input wire clk_50M,           // 50MHz Ê±ÖÓÊäÈë
-    input wire clk_11M0592,       // 11.0592MHz Ê±ÖÓÊäÈë£¨±¸ÓÃ£¬¿É²»ÓÃ£©
-    input wire clock_btn,         // BTN5ÊÖ¶¯Ê±ÖÓ°´Å¥¿ª¹Ø£¬´øÏû¶¶µçÂ·£¬°´ÏÂÊ±Îª1
-    input wire reset_btn,         // BTN6ÊÖ¶¯¸´Î»°´Å¥¿ª¹Ø£¬´øÏû¶¶µçÂ·£¬°´ÏÂÊ±Îª1
-    input  wire[3:0]  touch_btn,  // BTN1~BTN4£¬°´Å¥¿ª¹Ø£¬°´ÏÂÊ±Îª1
-    input  wire[31:0] dip_sw,     // 32Î»²¦Âë¿ª¹Ø£¬²¦µ½¡°ON¡±Ê±Îª1
-    output wire[15:0] leds,       // 16Î»LED£¬Êä³öÊ±1µãÁÁ
-    output wire[7:0]  dpy0,       // ÊýÂë¹ÜµÍÎ»ÐÅºÅ£¬°üÀ¨Ð¡Êýµã£¬Êä³ö1µãÁÁ
-    output wire[7:0]  dpy1,       // ÊýÂë¹Ü¸ßÎ»ÐÅºÅ£¬°üÀ¨Ð¡Êýµã£¬Êä³ö1µãÁÁ
+    input wire clk_50M,           // 50MHz Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    input wire clk_11M0592,       // 11.0592MHz Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ë£¨ï¿½ï¿½ï¿½Ã£ï¿½ï¿½É²ï¿½ï¿½Ã£ï¿½
+    input wire clock_btn,         // BTN5ï¿½Ö¶ï¿½Ê±ï¿½Ó°ï¿½Å¥ï¿½ï¿½ï¿½Ø£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±Îª1
+    input wire reset_btn,         // BTN6ï¿½Ö¶ï¿½ï¿½ï¿½Î»ï¿½ï¿½Å¥ï¿½ï¿½ï¿½Ø£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±Îª1
+    input  wire[3:0]  touch_btn,  // BTN1~BTN4ï¿½ï¿½ï¿½ï¿½Å¥ï¿½ï¿½ï¿½Ø£ï¿½ï¿½ï¿½ï¿½ï¿½Ê±Îª1
+    input  wire[31:0] dip_sw,     // 32Î»ï¿½ï¿½ï¿½ë¿ªï¿½Ø£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ONï¿½ï¿½Ê±Îª1
+    output wire[15:0] leds,       // 16Î»LEDï¿½ï¿½ï¿½ï¿½ï¿½Ê±1ï¿½ï¿½ï¿½ï¿½
+    output wire[7:0]  dpy0,       // ï¿½ï¿½ï¿½ï¿½Üµï¿½Î»ï¿½ÅºÅ£ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½1ï¿½ï¿½ï¿½ï¿½
+    output wire[7:0]  dpy1,       // ï¿½ï¿½ï¿½ï¿½Ü¸ï¿½Î»ï¿½ÅºÅ£ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½1ï¿½ï¿½ï¿½ï¿½
 
-    // BaseRAMÐÅºÅ
+    // BaseRAMï¿½Åºï¿½
     inout wire[31:0] base_ram_data,  
     output wire[19:0] base_ram_addr, 
     output wire[3:0] base_ram_be_n,  
@@ -17,7 +17,7 @@ module thinpad_top(
     output wire base_ram_oe_n,       
     output wire base_ram_we_n,       
 
-    // ExtRAMÐÅºÅ
+    // ExtRAMï¿½Åºï¿½
     inout wire[31:0] ext_ram_data,  
     output wire[19:0] ext_ram_addr, 
     output wire[3:0] ext_ram_be_n,  
@@ -25,11 +25,11 @@ module thinpad_top(
     output wire ext_ram_oe_n,       
     output wire ext_ram_we_n,       
 
-    // Ö±Á¬´®¿ÚÐÅºÅ
+    // Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Åºï¿½
     output wire txd,  
     input  wire rxd,  
 
-    // Flash´æ´¢Æ÷ÐÅºÅ
+    // Flashï¿½æ´¢ï¿½ï¿½ï¿½Åºï¿½
     output wire [22:0]flash_a,      
     inout  wire [15:0]flash_d,      
     output wire flash_rp_n,         
@@ -39,7 +39,7 @@ module thinpad_top(
     output wire flash_we_n,         
     output wire flash_byte_n,       
 
-    // Í¼ÏñÊä³öÐÅºÅ
+    // Í¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Åºï¿½
     output wire[2:0] video_red,    
     output wire[2:0] video_green,  
     output wire[1:0] video_blue,   
@@ -52,26 +52,26 @@ module thinpad_top(
 /* =========== Core Logic Begin =========== */
 
 // ----------------------------------------
-// 1. Ê±ÖÓÓë¸´Î»Éú³É
+// 1. Ê±ï¿½ï¿½ï¿½ë¸´Î»ï¿½ï¿½ï¿½ï¿½
 // ----------------------------------------
-wire locked, clk_10M, clk_20M;
+wire locked, clk_My, clk_20M;
 pll_example clock_gen (
   .clk_in1(clk_50M),
-  .clk_out1(clk_10M), 
+  .clk_out1(clk_My), 
   .clk_out2(clk_20M),
   .reset(reset_btn),
   .locked(locked)
 );
 
 reg reset_of_clk10M;
-always@(posedge clk_10M or negedge locked) begin
+always@(posedge clk_My or negedge locked) begin
     if(~locked) reset_of_clk10M <= 1'b1;
     else        reset_of_clk10M <= 1'b0;
 end
 wire cpu_resetn = ~reset_of_clk10M;
 
 // ----------------------------------------
-// 2. ´®¿ÚÊÕ·¢¿ØÖÆÆ÷ 
+// 2. ï¿½ï¿½ï¿½ï¿½ï¿½Õ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 
 // ----------------------------------------
 wire [7:0] ext_uart_rx;
 reg  [7:0] ext_uart_buffer;
@@ -80,7 +80,7 @@ wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
 async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
-    .clk(clk_10M), 
+    .clk(clk_My), 
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
     .RxD_clear(ext_uart_clear),
@@ -89,7 +89,7 @@ async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
 
 assign ext_uart_clear = ext_uart_ready; 
 async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
-    .clk(clk_10M), 
+    .clk(clk_My), 
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
     .TxD_start(ext_uart_start),
@@ -97,7 +97,7 @@ async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
 );
 
 // ----------------------------------------
-// 3. Àý»¯ AXI ½Ó¿Ú CPU (mycpu_top)
+// 3. ï¿½ï¿½ï¿½ï¿½ AXI ï¿½Ó¿ï¿½ CPU (mycpu_top)
 // ----------------------------------------
 wire [ 3:0] arid, arlen, arcache, awid, awlen, awcache, wid, wstrb, rid, bid;
 wire [31:0] araddr, rdata, awaddr, wdata;
@@ -108,7 +108,7 @@ wire awvalid, awready, wlast, wvalid, wready;
 wire bvalid, bready;
 
 mycpu_top u_cpu (
-    .aclk       (clk_10M),
+    .aclk       (clk_My),
     .aresetn    (cpu_resetn),
     
     .arid       (arid),
@@ -156,16 +156,16 @@ mycpu_top u_cpu (
 );
 
 // ----------------------------------------
-// 4. AXI ´Ó»ú×ª»»Âß¼­ (½« AXI ×ªÎª SRAM Ê±Ðò)
+// 4. AXI ï¿½Ó»ï¿½×ªï¿½ï¿½ï¿½ß¼ï¿½ (ï¿½ï¿½ AXI ×ªÎª SRAM Ê±ï¿½ï¿½)
 // ----------------------------------------
 
-// --- ¶ÁÐ´»¥³â×´Ì¬»ú (±£»¤µ¥¶Ë¿Ú SRAM) ---
+// --- ï¿½ï¿½Ð´ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¿ï¿½ SRAM) ---
 reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
 
-always @(posedge clk_10M) begin
+always @(posedge clk_My) begin
     if (!cpu_resetn) begin
         slave_state <= S_IDLE;
     end else begin
@@ -187,7 +187,7 @@ end
 wire is_read  = (slave_state == S_READ)  || (slave_state == S_IDLE && arvalid);
 wire is_write = (slave_state == S_WRITE) || (slave_state == S_IDLE && !arvalid && (awvalid || wvalid));
 
-// --- ¶ÁÍ¨µÀ (AR & R) Ö§³Ö Burst ---
+// --- ï¿½ï¿½Í¨ï¿½ï¿½ (AR & R) Ö§ï¿½ï¿½ Burst ---
 reg rvalid_reg;
 reg [31:0] raddr_reg;
 reg [3:0]  rid_reg;
@@ -198,7 +198,7 @@ reg [7:0]  rbeat_cnt;
 assign arready = is_read && !rvalid_reg;
 wire read_fire = arvalid && arready;
 
-always @(posedge clk_10M) begin
+always @(posedge clk_My) begin
     if (!cpu_resetn) begin
         rvalid_reg <= 0;
         rbeat_cnt  <= 0;
@@ -215,10 +215,10 @@ always @(posedge clk_10M) begin
         end else begin
             rbeat_cnt <= rbeat_cnt + 8'd1;
             if (rburst_reg == 2'b10) begin
-                // WRAP Ä£Ê½£ºÔÚ 32 ×Ö½Ú±ß½çÄÚ»Ø»· (¶ÔÓ¦Î» [4:2])
+                // WRAP Ä£Ê½ï¿½ï¿½ï¿½ï¿½ 32 ï¿½Ö½Ú±ß½ï¿½ï¿½Ú»Ø»ï¿½ (ï¿½ï¿½Ó¦Î» [4:2])
                 raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
             end else begin
-                // INCR Ä£Ê½ (ÓÃÓÚ Data SRAM µÈ)£ºË³ÐòÀÛ¼Ó 4
+                // INCR Ä£Ê½ (ï¿½ï¿½ï¿½ï¿½ Data SRAM ï¿½ï¿½)ï¿½ï¿½Ë³ï¿½ï¿½ï¿½Û¼ï¿½ 4
                 raddr_reg <= raddr_reg + 32'd4;
             end
         end
@@ -232,7 +232,7 @@ assign rid    = rid_reg;
 
 wire [31:0] current_raddr = read_fire ? araddr : raddr_reg;
 
-// --- Ð´Í¨µÀ (AW, W & B) ---
+// --- Ð´Í¨ï¿½ï¿½ (AW, W & B) ---
 reg aw_recvd, w_recvd;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
@@ -245,7 +245,7 @@ assign wready  = is_write && !w_recvd  && !bvalid_reg;
 wire aw_fire = awvalid && awready;
 wire w_fire  = wvalid && wready;
 
-always @(posedge clk_10M) begin
+always @(posedge clk_My) begin
     if (!cpu_resetn) begin
         aw_recvd <= 0;
         w_recvd <= 0;
@@ -284,7 +284,7 @@ wire [31:0] current_wdata = w_fire ? wdata : wdata_reg;
 wire [ 3:0] current_wstrb = w_fire ? wstrb : wstrb_reg;
 
 // ----------------------------------------
-// 5. ÄÚ´æÍ³Ò»Â·ÓÉÓëÎïÀí SRAM ¿ØÖÆ
+// 5. ï¿½Ú´ï¿½Í³Ò»Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SRAM ï¿½ï¿½ï¿½ï¿½
 // ----------------------------------------
 wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
 wire        mem_we   = do_write;
@@ -311,11 +311,11 @@ assign ext_ram_addr  =  mem_addr[21:2];
 assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
 
 // ----------------------------------------
-// 6. MMIO ´®¿ÚÂß¼­´¦Àí
+// 6. MMIO ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½
 // ----------------------------------------
 reg uart_dlab;
 
-always @(posedge clk_10M) begin
+always @(posedge clk_My) begin
     if(reset_of_clk10M) begin
         ext_uart_start <= 0;
         ext_uart_tx    <= 0;
@@ -334,7 +334,7 @@ always @(posedge clk_10M) begin
     end
 end
 
-always @(posedge clk_10M) begin
+always @(posedge clk_My) begin
     if(reset_of_clk10M) begin
         ext_uart_avai   <= 0;
         ext_uart_buffer <= 0;
@@ -350,7 +350,7 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-// ¶ÁÊý¾Ý·µ»Ø×ÜÏß
+// ï¿½ï¿½ï¿½ï¿½ï¿½Ý·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 assign rdata = is_base ? base_ram_data :
                is_ext  ? ext_ram_data  :
                is_uart ? (
@@ -359,7 +359,7 @@ assign rdata = is_base ? base_ram_data :
                ) : 32'd0;
 
 // ----------------------------------------
-// 7. ÆäËûÍâÉè½ûÓÃ¼°Ä¬ÈÏÉèÖÃ
+// 7. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¼ï¿½Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 // ----------------------------------------
 assign flash_rp_n   = 1'b1;
 assign flash_vpen   = 1'b1;

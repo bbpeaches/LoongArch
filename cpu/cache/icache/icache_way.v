@@ -1,4 +1,4 @@
-module cache_way (
+module icache_way (
     input  wire         clk,
     input  wire         resetn,
 

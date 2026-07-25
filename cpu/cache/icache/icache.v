@@ -168,7 +168,7 @@ module icache (
     // 实例化双路 Cache Way
     // ==========================================
     // Way 0
-    cache_way way0 (
+    icache_way way0 (
         .clk         (clk),
         .resetn      (resetn),
         // 读端口 (第 1 级流水线)
@@ -187,7 +187,7 @@ module icache (
     );
 
     // Way 1
-    cache_way way1 (
+    icache_way way1 (
         .clk         (clk),
         .resetn      (resetn),
         // 读端口 (第 1 级流水线)
