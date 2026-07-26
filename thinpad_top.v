@@ -1,5 +1,5 @@
 module thinpad_top(
-    input wire clk_cpu,           // 50MHz
+    input wire clk_50M,           // 50MHz
     input wire clk_11M0592,       
     input wire clock_btn,         
     input wire reset_btn,         
@@ -46,17 +46,17 @@ module thinpad_top(
 
 /* =========== Core Logic Begin =========== */
 
-wire locked, clk_My, clk_sram;
+wire locked, clk_cpu, clk_sram;
 pll_example clock_gen (
-  .clk_in1(clk_cpu),
-  .clk_out1(clk_My), 
+  .clk_in1(clk_50M),
+  .clk_out1(clk_cpu), 
   .clk_out2(clk_sram),
   .reset(reset_btn),
   .locked(locked)
 );
 
 reg reset_of_clk10M;
-always@(posedge clk_My or negedge locked) begin
+always@(posedge clk_cpu or negedge locked) begin
     if(~locked) reset_of_clk10M <= 1'b1;
     else        reset_of_clk10M <= 1'b0;
 end
@@ -69,7 +69,7 @@ wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
 async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
-    .clk(clk_My), 
+    .clk(clk_cpu), 
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
     .RxD_clear(ext_uart_clear),
@@ -78,7 +78,7 @@ async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
 
 assign ext_uart_clear = ext_uart_ready; 
 async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
-    .clk(clk_My), 
+    .clk(clk_cpu), 
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
     .TxD_start(ext_uart_start),
@@ -94,7 +94,7 @@ wire awvalid, awready, wlast, wvalid, wready;
 wire bvalid, bready;
 
 mycpu_top u_cpu (
-    .aclk       (clk_My),
+    .aclk       (clk_cpu),
     .aresetn    (cpu_resetn),
     
     .arid       (arid),
@@ -147,7 +147,7 @@ localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
 
-always @(posedge clk_My) begin
+always @(posedge clk_cpu) begin
     if (!cpu_resetn) begin
         slave_state <= S_IDLE;
     end else begin
@@ -179,7 +179,7 @@ reg [7:0]  rbeat_cnt;
 assign arready = is_read && !rvalid_reg;
 wire read_fire = arvalid && arready;
 
-always @(posedge clk_My) begin
+always @(posedge clk_cpu) begin
     if (!cpu_resetn) begin
         rvalid_reg <= 0;
         rbeat_cnt  <= 0;
@@ -223,7 +223,7 @@ assign wready  = is_write && !w_recvd  && !bvalid_reg;
 wire aw_fire = awvalid && awready;
 wire w_fire  = wvalid && wready;
 
-always @(posedge clk_My) begin
+always @(posedge clk_cpu) begin
     if (!cpu_resetn) begin
         aw_recvd <= 0;
         w_recvd <= 0;
@@ -287,7 +287,7 @@ assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
 
 reg uart_dlab;
 
-always @(posedge clk_My) begin
+always @(posedge clk_cpu) begin
     if(reset_of_clk10M) begin
         ext_uart_start <= 0;
         ext_uart_tx    <= 0;
@@ -306,7 +306,7 @@ always @(posedge clk_My) begin
     end
 end
 
-always @(posedge clk_My) begin
+always @(posedge clk_cpu) begin
     if(reset_of_clk10M) begin
         ext_uart_avai   <= 0;
         ext_uart_buffer <= 0;
