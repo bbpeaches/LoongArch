@@ -78,22 +78,20 @@ module decoder_top (
     assign inst_bltu    = (op_6  == 6'b0110_10);
     assign inst_bgeu    = (op_6  == 6'b0110_11);
     
-    wire use_rj = inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |
-                  inst_nor | inst_slt | inst_sltu | inst_mul_w | inst_sll_w | inst_srl_w | inst_sra_w |
-                  inst_slli_w | inst_srli_w | inst_srai_w | inst_slti | inst_sltui |
-                  inst_addi_w | inst_ori | inst_andi | inst_xori | inst_ld_w | inst_st_w |
-                  inst_ld_b | inst_st_b_raw | inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu |
-                  inst_jirl_raw | inst_cpucfg | inst_ld_bu;
-                  
-    wire use_rkd = inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |
-                   inst_nor | inst_slt | inst_sltu | inst_mul_w | inst_sll_w | inst_srl_w | inst_sra_w |
-                   inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu |
-                   inst_st_w | inst_st_b_raw;
+    // rj 永远在 inst[9:5]，直接盲读
+    assign rf_raddr1 = inst[9:5];   
 
-    wire dest_is_raddr2 = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu | inst_st_w | inst_st_b_raw;
+    // 直接用高 6 位和高 10 位的硬编码粗略判断 rkd，避开慢速译码链
+    wire fast_dest_is_raddr2 = (inst[31:26] == 6'b0101_10) | // beq
+                               (inst[31:26] == 6'b0101_11) | // bne
+                               (inst[31:26] == 6'b0110_00) | // blt
+                               (inst[31:26] == 6'b0110_01) | // bge
+                               (inst[31:26] == 6'b0110_10) | // bltu
+                               (inst[31:26] == 6'b0110_11) | // bgeu
+                               (inst[31:22] == 10'b0010_1001_10) | // st.w
+                               (inst[31:22] == 10'b0010_1001_00);  // st.b
 
-    assign rf_raddr1 = use_rj  ? inst[9:5]  : 5'd0;   
-    assign rf_raddr2 = use_rkd ? (dest_is_raddr2 ? inst[4:0] : inst[14:10]) : 5'd0;
+    assign rf_raddr2 = fast_dest_is_raddr2 ? inst[4:0] : inst[14:10];
     assign rf_waddr  = (inst_bl_raw) ? 5'd1 : inst[4:0];  
 
     assign invalid = ~(inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |
