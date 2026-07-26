@@ -79,7 +79,7 @@ reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_r (
     .clk(clk_My), 
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
@@ -88,7 +88,7 @@ async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
 );
 
 assign ext_uart_clear = ext_uart_ready; 
-async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
+async_transmitter #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_t (
     .clk(clk_My), 
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
