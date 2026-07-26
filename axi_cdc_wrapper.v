@@ -1,12 +1,8 @@
 module axi_cdc_wrapper #(
     parameter USE_CDC = 0
 )(
-    // ==========================================
-    // CPU 侧 (Slave Interface)
-    // ==========================================
     input  wire        s_axi_aclk,
     input  wire        s_axi_aresetn,
-    // AR
     input  wire [ 3:0] s_axi_arid,
     input  wire [31:0] s_axi_araddr,
     input  wire [ 7:0] s_axi_arlen,
@@ -17,14 +13,12 @@ module axi_cdc_wrapper #(
     input  wire [ 2:0] s_axi_arprot,
     input  wire        s_axi_arvalid,
     output wire        s_axi_arready,
-    // R
     output wire [ 3:0] s_axi_rid,
     output wire [31:0] s_axi_rdata,
     output wire [ 1:0] s_axi_rresp,
     output wire        s_axi_rlast,
     output wire        s_axi_rvalid,
     input  wire        s_axi_rready,
-    // AW (已修复: arcache -> awcache, arprot -> awprot)
     input  wire [ 3:0] s_axi_awid,
     input  wire [31:0] s_axi_awaddr,
     input  wire [ 7:0] s_axi_awlen,
@@ -35,24 +29,17 @@ module axi_cdc_wrapper #(
     input  wire [ 2:0] s_axi_awprot,  
     input  wire        s_axi_awvalid,
     output wire        s_axi_awready,
-    // W
     input  wire [31:0] s_axi_wdata,
     input  wire [ 3:0] s_axi_wstrb,
     input  wire        s_axi_wlast,
     input  wire        s_axi_wvalid,
     output wire        s_axi_wready,
-    // B
     output wire [ 3:0] s_axi_bid,
     output wire [ 1:0] s_axi_bresp,
     output wire        s_axi_bvalid,
     input  wire        s_axi_bready,
-
-    // ==========================================
-    // 外设 SRAM 侧 (Master Interface)
-    // ==========================================
     input  wire        m_axi_aclk,
     input  wire        m_axi_aresetn,
-    // AR
     output wire [ 3:0] m_axi_arid,
     output wire [31:0] m_axi_araddr,
     output wire [ 7:0] m_axi_arlen,
@@ -63,14 +50,12 @@ module axi_cdc_wrapper #(
     output wire [ 2:0] m_axi_arprot,
     output wire        m_axi_arvalid,
     input  wire        m_axi_arready,
-    // R
     input  wire [ 3:0] m_axi_rid,
     input  wire [31:0] m_axi_rdata,
     input  wire [ 1:0] m_axi_rresp,
     input  wire        m_axi_rlast,
     input  wire        m_axi_rvalid,
     output wire        m_axi_rready,
-    // AW (已修复: arcache -> awcache, arprot -> awprot)
     output wire [ 3:0] m_axi_awid,
     output wire [31:0] m_axi_awaddr,
     output wire [ 7:0] m_axi_awlen,
@@ -81,13 +66,11 @@ module axi_cdc_wrapper #(
     output wire [ 2:0] m_axi_awprot,  
     output wire        m_axi_awvalid,
     input  wire        m_axi_awready,
-    // W
     output wire [31:0] m_axi_wdata,
     output wire [ 3:0] m_axi_wstrb,
     output wire        m_axi_wlast,
     output wire        m_axi_wvalid,
     input  wire        m_axi_wready,
-    // B
     input  wire [ 3:0] m_axi_bid,
     input  wire [ 1:0] m_axi_bresp,
     input  wire        m_axi_bvalid,
@@ -96,7 +79,6 @@ module axi_cdc_wrapper #(
 
     generate
         if (USE_CDC) begin : gen_cdc
-            // 启用 Vivado 跨时钟域 IP
             axi_clock_converter_0 u_axi_cdc (
                 .s_axi_aclk    (s_axi_aclk),
                 .s_axi_aresetn (s_axi_aresetn),
@@ -117,7 +99,6 @@ module axi_cdc_wrapper #(
                 .s_axi_rvalid  (s_axi_rvalid),
                 .s_axi_rready  (s_axi_rready),
                 
-                // AW (已修复: 传递 awcache 和 awprot)
                 .s_axi_awid    (s_axi_awid),
                 .s_axi_awaddr  (s_axi_awaddr),
                 .s_axi_awlen   (s_axi_awlen),
@@ -158,7 +139,6 @@ module axi_cdc_wrapper #(
                 .m_axi_rvalid  (m_axi_rvalid),
                 .m_axi_rready  (m_axi_rready),
                 
-                // AW (已修复: 传递 awcache 和 awprot)
                 .m_axi_awid    (m_axi_awid),
                 .m_axi_awaddr  (m_axi_awaddr),
                 .m_axi_awlen   (m_axi_awlen),
@@ -181,7 +161,6 @@ module axi_cdc_wrapper #(
                 .m_axi_bready  (m_axi_bready)
             );
         end else begin : gen_bypass
-            // 纯直通 (Bypass) 连线，零额外延迟
             // AR 通道
             assign m_axi_arid    = s_axi_arid;
             assign m_axi_araddr  = s_axi_araddr;
@@ -200,7 +179,7 @@ module axi_cdc_wrapper #(
             assign s_axi_rlast   = m_axi_rlast;
             assign s_axi_rvalid  = m_axi_rvalid;
             assign m_axi_rready  = s_axi_rready;
-            // AW 通道 (已修复: 传递 awcache 和 awprot)
+            // AW 通道
             assign m_axi_awid    = s_axi_awid;
             assign m_axi_awaddr  = s_axi_awaddr;
             assign m_axi_awlen   = s_axi_awlen;
