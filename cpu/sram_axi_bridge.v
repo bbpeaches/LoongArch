@@ -17,7 +17,7 @@ module sram_axi_bridge(
     input  wire        icache_rready,
 
     // ==========================================
-    // Data SRAM-like (来自 CPU 访存)
+    // Data SRAM-like (来自 CPU 访存/写缓冲)
     // ==========================================
     input  wire        data_req,
     input  wire        data_wr,
@@ -88,7 +88,6 @@ module sram_axi_bridge(
 
     wire do_data_ar = data_req && !data_wr && !data_ar_acc;
 
-    // 协议保障：确保 arvalid 即使遇到 CPU flush 撤销请求，也能保持拉高直到 arready
     reg holding_ar;
     reg [3:0]  held_arid;
     reg [31:0] held_araddr;
@@ -110,9 +109,9 @@ module sram_axi_bridge(
     end
 
     assign arvalid = holding_ar ? 1'b1 : (do_data_ar || icache_arvalid);
-    assign arid    = holding_ar ? held_arid    : (do_data_ar ? 4'd1 : 4'd0);
-    assign araddr  = holding_ar ? held_araddr  : (do_data_ar ? data_addr : icache_araddr);
-    assign arsize  = holding_ar ? held_arsize  : (do_data_ar ? {1'b0, data_size} : 3'd2);
+    assign arid    = holding_ar ? held_arid  : (do_data_ar ? 4'd1 : 4'd0);
+    assign araddr  = holding_ar ? held_araddr : (do_data_ar ? data_addr : icache_araddr);
+    assign arsize  = holding_ar ? held_arsize : (do_data_ar ? {1'b0, data_size} : 3'd2);
     // I-Cache 发起 8 次读突发 (arlen=7)，Data 依然是单次读 (arlen=0)
     assign arlen   = holding_ar ? held_arlen   : (do_data_ar ? 8'd0 : 8'd7);
     // I-Cache 使用 WRAP 回环模式 (2'b10)，Data 使用 INCR (2'b01)
@@ -121,9 +120,7 @@ module sram_axi_bridge(
     assign arlock  = 2'd0;
     assign arcache = 4'd0;
     assign arprot  = 3'd0;
-
-    assign icache_arready = !holding_ar && !do_data_ar && arready;
-    wire data_ar_ready_internal = !holding_ar && do_data_ar && arready;
+    assign icache_arready = arvalid && arready && (arid == 4'd0);
 
     // ==========================================
     // 2. AW & W 通道（写请求与写数据）: 仅供 Data SRAM 使用
@@ -193,7 +190,6 @@ module sram_axi_bridge(
     // ==========================================
     // 3. R & B 通道（响应处理）
     // ==========================================
-    // 当返回数据属于 I-Cache 时交由 I-Cache 决定 rready，Data 默认随时可接收
     assign rready = (rvalid && rid == 4'd0) ? icache_rready : 1'b1; 
     assign bready = 1'b1;
 
