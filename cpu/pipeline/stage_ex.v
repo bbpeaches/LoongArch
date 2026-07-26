@@ -119,6 +119,6 @@ module stage_ex (
     assign data_sram_addr  = ex_alu_result;
     assign data_sram_wdata = ex_is_st_b ? {4{ex_rdata2[7:0]}} : ex_rdata2;
 
-    assign ex_mem_read = ex_mem_en && (data_sram_wen == 4'b0000);
+    assign ex_mem_read = ex_mem_en && !(ex_is_st_w | ex_is_st_b);
 
 endmodule

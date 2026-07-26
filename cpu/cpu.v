@@ -112,7 +112,7 @@ module cpu(
         end
     end
 
-    wire is_data_write = (internal_data_wen != 4'b0000);
+    wire is_data_write = ex_is_st_w | ex_is_st_b;
 
     assign data_sram_req   = internal_data_en & ~data_addr_rcv;
     assign data_sram_wr    = is_data_write;
