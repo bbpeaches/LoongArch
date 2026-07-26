@@ -1,15 +1,14 @@
 module thinpad_top(
-    input wire clk_50M,           // 50MHz ʱ������
-    input wire clk_11M0592,       // 11.0592MHz ʱ�����루���ã��ɲ��ã�
-    input wire clock_btn,         // BTN5�ֶ�ʱ�Ӱ�ť���أ���������·������ʱΪ1
-    input wire reset_btn,         // BTN6�ֶ���λ��ť���أ���������·������ʱΪ1
-    input  wire[3:0]  touch_btn,  // BTN1~BTN4����ť���أ�����ʱΪ1
-    input  wire[31:0] dip_sw,     // 32λ���뿪�أ�������ON��ʱΪ1
-    output wire[15:0] leds,       // 16λLED�����ʱ1����
-    output wire[7:0]  dpy0,       // ����ܵ�λ�źţ�����С���㣬���1����
-    output wire[7:0]  dpy1,       // ����ܸ�λ�źţ�����С���㣬���1����
+    input wire clk_50M,           // 50MHz
+    input wire clk_11M0592,       
+    input wire clock_btn,         
+    input wire reset_btn,         
+    input  wire[3:0]  touch_btn,  
+    input  wire[31:0] dip_sw,     
+    output wire[15:0] leds,       
+    output wire[7:0]  dpy0,       
+    output wire[7:0]  dpy1,       
 
-    // BaseRAM�ź�
     inout wire[31:0] base_ram_data,  
     output wire[19:0] base_ram_addr, 
     output wire[3:0] base_ram_be_n,  
@@ -17,7 +16,6 @@ module thinpad_top(
     output wire base_ram_oe_n,       
     output wire base_ram_we_n,       
 
-    // ExtRAM�ź�
     inout wire[31:0] ext_ram_data,  
     output wire[19:0] ext_ram_addr, 
     output wire[3:0] ext_ram_be_n,  
@@ -25,11 +23,9 @@ module thinpad_top(
     output wire ext_ram_oe_n,       
     output wire ext_ram_we_n,       
 
-    // ֱ�������ź�
     output wire txd,  
     input  wire rxd,  
 
-    // Flash�洢���ź�
     output wire [22:0]flash_a,      
     inout  wire [15:0]flash_d,      
     output wire flash_rp_n,         
@@ -39,7 +35,6 @@ module thinpad_top(
     output wire flash_we_n,         
     output wire flash_byte_n,       
 
-    // ͼ������ź�
     output wire[2:0] video_red,    
     output wire[2:0] video_green,  
     output wire[1:0] video_blue,   
@@ -51,9 +46,6 @@ module thinpad_top(
 
 /* =========== Core Logic Begin =========== */
 
-// ----------------------------------------
-// 1. ʱ���븴λ����
-// ----------------------------------------
 wire locked, clk_My, clk_20M;
 pll_example clock_gen (
   .clk_in1(clk_50M),
@@ -70,16 +62,13 @@ always@(posedge clk_My or negedge locked) begin
 end
 wire cpu_resetn = ~reset_of_clk10M;
 
-// ----------------------------------------
-// 2. �����շ������� 
-// ----------------------------------------
 wire [7:0] ext_uart_rx;
 reg  [7:0] ext_uart_buffer;
 reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
     .clk(clk_My), 
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
@@ -88,7 +77,7 @@ async_receiver #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_r (
 );
 
 assign ext_uart_clear = ext_uart_ready; 
-async_transmitter #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_t (
+async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
     .clk(clk_My), 
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
@@ -96,9 +85,6 @@ async_transmitter #(.ClkFrequency(55000000), .Baud(115200)) ext_uart_t (
     .TxD_data(ext_uart_tx)
 );
 
-// ----------------------------------------
-// 3. ���� AXI �ӿ� CPU (mycpu_top)
-// ----------------------------------------
 wire [ 3:0] arid, arlen, arcache, awid, awlen, awcache, wid, wstrb, rid, bid;
 wire [31:0] araddr, rdata, awaddr, wdata;
 wire [ 2:0] arsize, arprot, awsize, awprot;
@@ -155,11 +141,7 @@ mycpu_top u_cpu (
     .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
 );
 
-// ----------------------------------------
-// 4. AXI �ӻ�ת���߼� (�� AXI תΪ SRAM ʱ��)
-// ----------------------------------------
 
-// --- ��д����״̬�� (�������˿� SRAM) ---
 reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
@@ -187,7 +169,6 @@ end
 wire is_read  = (slave_state == S_READ)  || (slave_state == S_IDLE && arvalid);
 wire is_write = (slave_state == S_WRITE) || (slave_state == S_IDLE && !arvalid && (awvalid || wvalid));
 
-// --- ��ͨ�� (AR & R) ֧�� Burst ---
 reg rvalid_reg;
 reg [31:0] raddr_reg;
 reg [3:0]  rid_reg;
@@ -215,10 +196,8 @@ always @(posedge clk_My) begin
         end else begin
             rbeat_cnt <= rbeat_cnt + 8'd1;
             if (rburst_reg == 2'b10) begin
-                // WRAP ģʽ���� 32 �ֽڱ߽��ڻػ� (��Ӧλ [4:2])
                 raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
             end else begin
-                // INCR ģʽ (���� Data SRAM ��)��˳���ۼ� 4
                 raddr_reg <= raddr_reg + 32'd4;
             end
         end
@@ -232,7 +211,6 @@ assign rid    = rid_reg;
 
 wire [31:0] current_raddr = read_fire ? araddr : raddr_reg;
 
-// --- дͨ�� (AW, W & B) ---
 reg aw_recvd, w_recvd;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
@@ -283,9 +261,6 @@ wire [31:0] current_waddr = aw_fire ? awaddr : awaddr_reg;
 wire [31:0] current_wdata = w_fire ? wdata : wdata_reg;
 wire [ 3:0] current_wstrb = w_fire ? wstrb : wstrb_reg;
 
-// ----------------------------------------
-// 5. �ڴ�ͳһ·�������� SRAM ����
-// ----------------------------------------
 wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
 wire        mem_we   = do_write;
 wire        mem_re   = rvalid_reg; 
@@ -310,9 +285,6 @@ assign ext_ram_be_n  =  (is_ext && mem_we) ? ~current_wstrb : 4'b0000;
 assign ext_ram_addr  =  mem_addr[21:2];
 assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
 
-// ----------------------------------------
-// 6. MMIO �����߼�����
-// ----------------------------------------
 reg uart_dlab;
 
 always @(posedge clk_My) begin
@@ -350,7 +322,6 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-// �����ݷ�������
 assign rdata = is_base ? base_ram_data :
                is_ext  ? ext_ram_data  :
                is_uart ? (
@@ -358,9 +329,6 @@ assign rdata = is_base ? base_ram_data :
                    (mem_addr[7:2] == 6'h00) ? {24'd0, ext_uart_buffer} : 32'd0
                ) : 32'd0;
 
-// ----------------------------------------
-// 7. ����������ü�Ĭ������
-// ----------------------------------------
 assign flash_rp_n   = 1'b1;
 assign flash_vpen   = 1'b1;
 assign flash_ce_n   = 1'b1;
@@ -379,7 +347,5 @@ assign video_de    = 1'b0;
 assign leds = 16'd0;
 assign dpy0 = 8'd0;
 assign dpy1 = 8'd0;
-
-/* =========== Core Logic End =========== */
 
 endmodule
