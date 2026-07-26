@@ -6,7 +6,8 @@ module stage_id (
 
     input  wire [31:0] id_pc,
     input  wire [31:0] id_inst,
-
+    input  wire        id_valid,
+    
     input  wire        wb_rf_we,
     input  wire [ 4:0] wb_waddr,
     input  wire [31:0] wb_data,
@@ -62,7 +63,7 @@ module stage_id (
     wire [ 4:0] dec_rs1, dec_rs2;
 
     decoder_top _decoder_top (
-        .inst      (id_inst),
+        .inst      (id_inst), 
         .rf_raddr1 (dec_rs1), .rf_raddr2 (dec_rs2),
         .rf_we     (id_rf_we_raw), .rf_waddr (id_waddr_raw),
         .imm       (id_imm),      .use_imm   (id_use_imm),
@@ -74,19 +75,21 @@ module stage_id (
         .is_ld_b(id_is_ld_b_raw), .is_st_b(id_is_st_b_raw), .is_st_w(id_is_st_w_raw),
         .is_ld_bu(id_is_ld_bu_raw)
     );
-    
-    assign id_rs1 = dec_rs1;
-    assign id_rs2 = dec_rs2;
 
-    assign id_rf_we = resetn && !id_invalid && id_rf_we_raw && (id_waddr_raw != 5'd0);
-    assign id_waddr = id_invalid ? 5'd0 : id_waddr_raw;
-    assign id_wb_sel = id_invalid ? 2'd0 : id_wb_sel_raw;
-    assign id_mem_en = !id_invalid && id_mem_en_raw;
-    assign id_is_st_w = !id_invalid && id_is_st_w_raw;
-    assign id_is_st_b = !id_invalid && id_is_st_b_raw;
-    assign id_is_ld_b = !id_invalid && id_is_ld_b_raw;
-    assign id_is_ld_bu= !id_invalid && id_is_ld_bu_raw;
-    assign id_alu_op  = id_invalid ? 12'd0 : id_alu_op_raw;
+    wire valid_inst = id_valid && !id_invalid;
+
+    assign id_rs1 = id_valid ? dec_rs1 : 5'd0;
+    assign id_rs2 = id_valid ? dec_rs2 : 5'd0;
+
+    assign id_rf_we   = resetn && valid_inst && id_rf_we_raw && (id_waddr_raw != 5'd0);
+    assign id_waddr   = valid_inst ? id_waddr_raw : 5'd0;
+    assign id_wb_sel  = valid_inst ? id_wb_sel_raw : 2'd0;
+    assign id_mem_en  = valid_inst && id_mem_en_raw;
+    assign id_is_st_w = valid_inst && id_is_st_w_raw;
+    assign id_is_st_b = valid_inst && id_is_st_b_raw;
+    assign id_is_ld_b = valid_inst && id_is_ld_b_raw;
+    assign id_is_ld_bu= valid_inst && id_is_ld_bu_raw;
+    assign id_alu_op  = valid_inst ? id_alu_op_raw : 12'd0;
 
     wire [31:0] rf_rdata1, rf_rdata2;
     regfile _regfile (
@@ -118,15 +121,12 @@ module stage_id (
 
     wire inst_cond_branch = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu;
     
-    // 剥离 invalid 检查，让判断逻辑高速并行
     assign id_is_branch = (inst_b | is_bl | is_jirl | inst_cond_branch);
 
-    // 并行计算跳转目标：不需要等寄存器读出的普通跳转，直接并线算 pc+imm
     wire [31:0] normal_br_target = id_pc + id_imm;
     wire [31:0] jirl_br_target   = id_fwd_rdata1 + id_imm;
     wire [31:0] actual_target    = is_jirl ? jirl_br_target : normal_br_target;
 
-    // 分支比对全速执行，不需要等待 !id_invalid
     wire actual_taken = (inst_b | is_bl | is_jirl |
                          (inst_beq  & id_rj_eq_rd) |
                          (inst_bne  & ~id_rj_eq_rd) |
@@ -139,13 +139,14 @@ module stage_id (
                       (actual_taken && !id_pred_taken) || 
                       (actual_taken && (actual_target != id_pred_target));
 
-    assign id_br_taken  = pred_wrong && !id_invalid;
+    assign id_br_taken  = pred_wrong && !stall_id && valid_inst;
     assign id_br_target = actual_taken ? actual_target : (id_pc + 32'd4);
 
     wire is_call = is_bl | (is_jirl & (id_waddr_raw == 5'd1));
     wire is_ret  = is_jirl & (dec_rs1 == 5'd1) & (id_waddr_raw == 5'd0);
 
-    assign upd_bpu_en          = (id_is_branch || id_pred_taken) && !stall_id && !id_invalid;
+    // BPU 同样在这里受到严格保护
+    assign upd_bpu_en          = (id_is_branch || id_pred_taken) && !stall_id && valid_inst;
     assign upd_bpu_pc          = id_pc;
     assign upd_bpu_ghr         = id_pred_ghr;
     assign upd_bpu_br_type_out = is_call ? 2'b10 :
@@ -154,8 +155,8 @@ module stage_id (
     assign upd_bpu_taken       = actual_taken;
     assign upd_bpu_target      = actual_target;
 
-    assign id_alu_src1 = id_invalid ? 32'd0 : (is_pcaddu12i ? id_pc : id_fwd_rdata1);
-    assign id_alu_src2 = id_invalid ? 32'd0 : (id_use_imm ? id_imm : id_fwd_rdata2);
-    assign id_rdata2   = id_invalid ? 32'd0 : id_fwd_rdata2;
+    assign id_alu_src1 = valid_inst ? (is_pcaddu12i ? id_pc : id_fwd_rdata1) : 32'd0;
+    assign id_alu_src2 = valid_inst ? (id_use_imm ? id_imm : id_fwd_rdata2) : 32'd0;
+    assign id_rdata2   = valid_inst ? id_fwd_rdata2 : 32'd0;
 
 endmodule

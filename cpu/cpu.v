@@ -230,7 +230,7 @@ module cpu(
         .id_pred_taken(id_pred_taken), .id_pred_target(id_pred_target), .id_pred_ghr(id_pred_ghr)
     );
 
-    wire [31:0] safe_id_inst = id_valid ? id_inst : 32'h03400000;
+    // wire [31:0] safe_id_inst = id_valid ? id_inst : 32'h03400000;
 
     // ==========================================
     // ID 阶段
@@ -247,7 +247,9 @@ module cpu(
 
     stage_id _stage_id (
         .clk(clk), .resetn(resetn), .stall_id(stall[1]), .ex_fw_valid(ex_fw_valid),
-        .id_pc(id_pc), .id_inst(safe_id_inst),
+        .id_pc(id_pc),
+        .id_inst(id_inst),      
+        .id_valid(id_valid),
         .wb_rf_we(wb_rf_we), .wb_waddr(wb_waddr), .wb_data(wb_data),
         .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_result(ex_result),
         .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_final_data(mem_final_data),
