@@ -37,7 +37,8 @@ module stage_id (
     output wire [31:0] id_imm,
     output wire [11:0] id_br_info,
     output wire        id_is_branch,
-    output wire        id_valid_inst
+    output wire        id_valid_inst,
+    output wire [31:0] id_normal_br_target 
 );
     wire        id_rf_we_raw;
     wire [ 4:0] id_waddr_raw;
@@ -111,5 +112,7 @@ module stage_id (
     assign id_alu_src1 = id_valid_inst ? (is_pcaddu12i ? id_pc : id_fwd_rdata1) : 32'd0;
     assign id_alu_src2 = id_valid_inst ? (id_use_imm ? id_imm : id_fwd_rdata2) : 32'd0;
     assign id_rdata2   = id_valid_inst ? id_fwd_rdata2 : 32'd0;
+    
+    assign id_normal_br_target = id_pc + id_imm;
 
 endmodule

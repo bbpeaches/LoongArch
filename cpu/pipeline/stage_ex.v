@@ -21,6 +21,7 @@ module stage_ex (
     input  wire [31:0] ex_pred_target,
     input  wire [ 7:0] ex_pred_ghr,
     input  wire        ex_valid_inst,
+    input  wire [31:0] ex_normal_br_target, // <-- 新增：接收预计算的目标地址
 
     output wire [31:0] ex_result,
     output wire [31:0] ex_mul_result,
@@ -32,7 +33,7 @@ module stage_ex (
     output wire [31:0] data_sram_wdata,
     output wire        ex_mem_read,
 
-    // --- 新增：产生冲刷和 BPU 更新信号 ---
+    // --- 产生冲刷和 BPU 更新信号 ---
     output wire        ex_br_taken,
     output wire [31:0] ex_br_target,
     output wire        upd_bpu_en,
@@ -77,9 +78,9 @@ module stage_ex (
         .is_ltu(ex_rj_lt_rd_unsigned)
     );
 
-    wire [31:0] normal_br_target = ex_pc + ex_imm;
+    // <-- 修改点：直接使用前递进来的 target，避开 EX 阶段内运算
     wire [31:0] jirl_br_target   = ex_alu_src1 + ex_imm;
-    wire [31:0] actual_target    = is_jirl ? jirl_br_target : normal_br_target;
+    wire [31:0] actual_target    = is_jirl ? jirl_br_target : ex_normal_br_target; 
 
     wire actual_taken = (inst_b | is_bl | is_jirl |
                          (inst_beq  & ex_rj_eq_rd) |
