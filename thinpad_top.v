@@ -1,5 +1,5 @@
 module thinpad_top(
-    input wire clk_50M,           // 50MHz
+    input wire clk_cpu,           // 50MHz
     input wire clk_11M0592,       
     input wire clock_btn,         
     input wire reset_btn,         
@@ -46,11 +46,11 @@ module thinpad_top(
 
 /* =========== Core Logic Begin =========== */
 
-wire locked, clk_My, clk_20M;
+wire locked, clk_My, clk_sram;
 pll_example clock_gen (
-  .clk_in1(clk_50M),
+  .clk_in1(clk_cpu),
   .clk_out1(clk_My), 
-  .clk_out2(clk_20M),
+  .clk_out2(clk_sram),
   .reset(reset_btn),
   .locked(locked)
 );
