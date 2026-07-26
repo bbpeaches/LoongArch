@@ -20,9 +20,14 @@ module stage_if (
                           if_pred_taken ? if_pred_target : seq_pc;
 
     pc_reg _pc_reg (
-        .clk(clk), .resetn(resetn), .stall_pc(stall_if), .next_pc(next_pc), .pc(if_pc)
+        .clk(clk), 
+        .resetn(resetn), 
+        .stall_pc(stall_if), 
+        .flush_pc(id_pred_wrong), 
+        .next_pc(next_pc), 
+        .pc(if_pc)
     );
-
+    
     assign inst_sram_en   = resetn;
     assign inst_sram_addr = if_pc;
     assign if_req_fire    = resetn && !stall_if;

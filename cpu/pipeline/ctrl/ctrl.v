@@ -2,7 +2,7 @@ module ctrl (
     input  wire       stall_from_id,
     input  wire       stall_from_if,
     input  wire       stall_from_mem,
-    input  wire       flush_from_id,
+    input  wire       flush_from_ex,
 
     output wire [4:0] stall,
     output wire [4:0] flush
@@ -12,8 +12,9 @@ module ctrl (
                    stall_from_id  ? 5'b00011 : 5'b00000;
 
     assign flush[0] = 1'b0;
-    assign flush[1] = flush_from_id && !stall[1];
-    assign flush[2] = (stall[1] && !stall[2]);
+    // EX 预测错误时，冲刷 IF/ID 和 ID/EX
+    assign flush[1] = flush_from_ex; 
+    assign flush[2] = flush_from_ex || (stall[1] && !stall[2]); 
     assign flush[3] = (stall[2] && !stall[3]);
     assign flush[4] = (stall[3] && !stall[4]);
 
