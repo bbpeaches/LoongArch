@@ -316,9 +316,9 @@ output wire m_axi_rready;
     .C_AXI_ID_WIDTH(4),
     .C_AXI_ADDR_WIDTH(32),
     .C_AXI_DATA_WIDTH(32),
-    .C_S_AXI_ACLK_RATIO(1),
-    .C_M_AXI_ACLK_RATIO(2),
-    .C_AXI_IS_ACLK_ASYNC(1),
+    .C_S_AXI_ACLK_RATIO(2),
+    .C_M_AXI_ACLK_RATIO(1),
+    .C_AXI_IS_ACLK_ASYNC(0),
     .C_AXI_PROTOCOL(0),
     .C_AXI_SUPPORTS_USER_SIGNALS(0),
     .C_AXI_AWUSER_WIDTH(1),
@@ -328,7 +328,7 @@ output wire m_axi_rready;
     .C_AXI_BUSER_WIDTH(1),
     .C_AXI_SUPPORTS_WRITE(1),
     .C_AXI_SUPPORTS_READ(1),
-    .C_SYNCHRONIZER_STAGE(2)
+    .C_SYNCHRONIZER_STAGE(3)
   ) inst (
     .s_axi_aclk(s_axi_aclk),
     .s_axi_aresetn(s_axi_aresetn),
