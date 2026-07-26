@@ -5,6 +5,7 @@ module hazard_ctrl (
 
     input  wire [ 4:0] ex_waddr,
     input  wire        ex_mem_read,
+    input  wire        ex_is_mul,
 
     input  wire        id_br_taken,
     input  wire        if_wait,
@@ -13,13 +14,15 @@ module hazard_ctrl (
     output wire [ 4:0] stall,
     output wire [ 4:0] flush
 );
-    wire normal_load_use = ex_mem_read && (ex_waddr != 5'd0) &&
-                           ((ex_waddr == id_rs1) || (ex_waddr == id_rs2));
+    wire ex_dep_hit = (ex_waddr != 5'd0) &&
+                      ((ex_waddr == id_rs1) || (ex_waddr == id_rs2));
 
-    wire branch_stall_ex = id_is_branch && ex_mem_read && (ex_waddr != 5'd0) &&
-                           ((ex_waddr == id_rs1) || (ex_waddr == id_rs2));
+    wire normal_load_use = ex_mem_read && ex_dep_hit;
+    wire mul_use_hazard  = ex_is_mul && ex_dep_hit;
 
-    wire stall_req_from_id = normal_load_use || branch_stall_ex;
+    wire branch_stall_ex = id_is_branch && (ex_mem_read || ex_is_mul) && ex_dep_hit;
+
+    wire stall_req_from_id = normal_load_use || mul_use_hazard || branch_stall_ex;
 
     ctrl _sys_ctrl (
         .stall_from_id  (stall_req_from_id),

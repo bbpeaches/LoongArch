@@ -1,4 +1,6 @@
 module stage_ex (
+    input  wire        clk,
+    input  wire        resetn,
     // --- 上游输入 (来自 ID/EX 寄存器) ---
     input  wire [31:0] ex_pc,
     input  wire [ 1:0] ex_wb_sel,
@@ -12,6 +14,7 @@ module stage_ex (
 
     // --- 传给 EX/MEM 寄存器的输出 ---
     output wire [31:0] ex_result,
+    output wire [31:0] ex_mul_result,
     output wire [ 1:0] ex_addr_align,
 
     // --- 传给外部 Data SRAM 的输出 ---
@@ -23,17 +26,21 @@ module stage_ex (
     // --- 传给 Hazard 的状态输出 ---
     output wire        ex_mem_read
 );
-    wire [31:0] ex_alu_result, ex_mul_result;
+    wire [31:0] ex_alu_result;
 
     alu_top _alu_top (
         .alu_op(ex_alu_op), .alu_src1(ex_alu_src1), .alu_src2(ex_alu_src2), .alu_result(ex_alu_result)
     );
+
     mul_top _mul_top (
-        .x(ex_alu_src1), .y(ex_alu_src2), .result(ex_mul_result)
+        .clk(clk),
+        .resetn(resetn),
+        .x(ex_alu_src1),
+        .y(ex_alu_src2),
+        .result(ex_mul_result)
     );
 
-    assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) :
-                       (ex_wb_sel == 2'b10) ? ex_mul_result   : ex_alu_result;
+    assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;
 
     assign ex_addr_align = ex_alu_result[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;

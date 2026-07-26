@@ -4,6 +4,7 @@ module stage_mem (
     input  wire        mem_is_ld_bu,
     input  wire [ 1:0] mem_addr_align,
     input  wire [31:0] mem_result,
+    input  wire [31:0] mem_mul_result,
     input  wire        mem_valid,
 
     input  wire [31:0] data_sram_rdata,
@@ -19,12 +20,14 @@ module stage_mem (
                                                       data_sram_rdata[31:24];
 
     wire mem_is_load = (mem_wb_sel == 2'b01);
-    wire [31:0] mem_ram_rdata = mem_is_ld_b  ? {{24{lb_data[7]}}, lb_data} : 
-                                mem_is_ld_bu ? {24'd0, lb_data}            : 
+    wire mem_is_mul  = (mem_wb_sel == 2'b10);
+    wire [31:0] mem_ram_rdata = mem_is_ld_b  ? {{24{lb_data[7]}}, lb_data} :
+                                mem_is_ld_bu ? {24'd0, lb_data}            :
                                 data_sram_rdata;
 
     assign mem_done       = !mem_valid || !mem_is_load || data_sram_resp_valid;
     assign mem_wait       = mem_valid && mem_is_load && !data_sram_resp_valid;
-    assign mem_final_data = mem_is_load ? mem_ram_rdata : mem_result;
+    assign mem_final_data = mem_is_load ? mem_ram_rdata :
+                            mem_is_mul  ? mem_mul_result : mem_result;
 
 endmodule

@@ -133,7 +133,7 @@ wire awvalid_sram, awready_sram, wlast_sram, wvalid_sram, wready_sram;
 wire bvalid_sram, bready_sram;
 
 axi_cdc_wrapper #(
-    .USE_CDC(0) // 1: 启用 IP 0: 直通不打拍
+    .USE_CDC(1) // 
 ) u_axi_cdc_wrapper (
     // Slave 侧 (接 CPU)
     .s_axi_aclk    (clk_cpu),

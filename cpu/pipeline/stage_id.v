@@ -2,6 +2,7 @@ module stage_id (
     input  wire        clk,
     input  wire        resetn,
     input  wire        stall_id,
+    input  wire        ex_fw_valid,
 
     input  wire [31:0] id_pc,
     input  wire [31:0] id_inst,
@@ -98,7 +99,7 @@ module stage_id (
     wire [31:0] id_fwd_rdata1, id_fwd_rdata2;
     forward_ctrl _forward_ctrl (
         .id_rs1(id_rs1), .id_rs2(id_rs2),
-        .ex_we(ex_rf_we),   .ex_waddr(ex_waddr),   .ex_fw_data(ex_result),
+        .ex_we(ex_rf_we && ex_fw_valid),   .ex_waddr(ex_waddr),   .ex_fw_data(ex_result),
         .mem_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_fw_data(mem_final_data),
         .wb_we(wb_rf_we),   .wb_waddr(wb_waddr),   .wb_fw_data(wb_data),
         .rf_rdata1(rf_rdata1), .rf_rdata2(rf_rdata2),

@@ -1,39 +1,39 @@
 module cpu(
-    input           clk, resetn,
+    input         clk, resetn,
     
     // ==========================================
     // Inst SRAM (类SRAM握手接口)
     // ==========================================
-    output          inst_sram_req,
-    output          inst_sram_wr,
-    output [ 1:0]   inst_sram_size,
-    output [31:0]   inst_sram_addr,
-    output [ 3:0]   inst_sram_wstrb,
-    output [31:0]   inst_sram_wdata,
-    input           inst_sram_addr_ok,
-    input           inst_sram_data_ok,
-    input  [31:0]   inst_sram_rdata,
+    output         inst_sram_req,
+    output         inst_sram_wr,
+    output [ 1:0]  inst_sram_size,
+    output [31:0]  inst_sram_addr,
+    output [ 3:0]  inst_sram_wstrb,
+    output [31:0]  inst_sram_wdata,
+    input          inst_sram_addr_ok,
+    input          inst_sram_data_ok,
+    input  [31:0]  inst_sram_rdata,
     
     // ==========================================
     // Data SRAM (类SRAM握手接口)
     // ==========================================
-    output          data_sram_req,
-    output          data_sram_wr,
-    output [ 1:0]   data_sram_size,
-    output [31:0]   data_sram_addr,
-    output [ 3:0]   data_sram_wstrb,
-    output [31:0]   data_sram_wdata,
-    input           data_sram_addr_ok,
-    input           data_sram_data_ok,
-    input  [31:0]   data_sram_rdata,
+    output         data_sram_req,
+    output         data_sram_wr,
+    output [ 1:0]  data_sram_size,
+    output [31:0]  data_sram_addr,
+    output [ 3:0]  data_sram_wstrb,
+    output [31:0]  data_sram_wdata,
+    input          data_sram_addr_ok,
+    input          data_sram_data_ok,
+    input  [31:0]  data_sram_rdata,
     
     // ==========================================
     // Debug 接口
     // ==========================================
-    output [31:0]   debug_wb_pc,
-    output          debug_wb_rf_wen,
-    output [ 4:0]   debug_wb_rf_wnum,
-    output [31:0]   debug_wb_rf_wdata
+    output [31:0]  debug_wb_pc,
+    output         debug_wb_rf_wen,
+    output [ 4:0]  debug_wb_rf_wnum,
+    output [31:0]  debug_wb_rf_wdata
 );
     wire [4:0] stall;
     wire [4:0] flush;
@@ -41,9 +41,9 @@ module cpu(
     // ==========================================
     // 取指类SRAM握手转接与缓存逻辑
     // ==========================================
-    wire        internal_inst_en;
+    wire         internal_inst_en;
     wire [31:0] internal_inst_addr;
-    wire        inst_sram_wait;
+    wire         inst_sram_wait;
     
     reg inst_addr_rcv;
 
@@ -57,8 +57,8 @@ module cpu(
             inst_discard_cnt <= 3'd0;
         end else begin
             inst_discard_cnt <= inst_discard_cnt 
-                              + (current_fetch_abandoned ? 3'd1 : 3'd0) 
-                              - (old_fetch_returned ? 3'd1 : 3'd0);
+                            + (current_fetch_abandoned ? 3'd1 : 3'd0) 
+                            - (old_fetch_returned ? 3'd1 : 3'd0);
         end
     end
 
@@ -76,10 +76,10 @@ module cpu(
         end
     end
 
-    reg         inst_buf_valid;
+    reg          inst_buf_valid;
     reg  [31:0] inst_buf_data;
     reg  [31:0] inst_buf_pc;
-    reg         inst_buf_pred_taken;
+    reg          inst_buf_pred_taken;
     reg  [31:0] inst_buf_pred_target;
     reg  [7:0]  inst_buf_pred_ghr;
 
@@ -95,11 +95,11 @@ module cpu(
     // ==========================================
     // 访存类SRAM握手转接逻辑
     // ==========================================
-    wire        internal_data_en;
+    wire         internal_data_en;
     wire [ 3:0] internal_data_wen;
     wire [31:0] internal_data_addr;
     wire [31:0] internal_data_wdata;
-    wire        mem_wait;
+    wire         mem_wait;
 
     reg data_addr_rcv;
     always @(posedge clk) begin
@@ -130,10 +130,10 @@ module cpu(
     // ==========================================
     // 分支预测单元
     // ==========================================
-    wire        if_pred_taken, id_pred_taken;
+    wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
     wire [7:0]  if_pred_ghr, id_pred_ghr;
-    wire        upd_bpu_en, upd_bpu_taken;
+    wire         upd_bpu_en, upd_bpu_taken;
     wire [ 1:0] upd_bpu_br_type;
     wire [7:0]  upd_bpu_ghr;
     wire [31:0] upd_bpu_pc, upd_bpu_target;
@@ -142,17 +142,45 @@ module cpu(
     wire [31:0] stat_loop_hits, stat_loop_confident, stat_loop_correct, stat_loop_wrong, stat_loop_override_taken, stat_loop_override_wrong;
 
     // ==========================================
+    // BPU 更新信号流水线寄存器
+    // ==========================================
+    reg        upd_bpu_en_r;
+    reg [31:0] upd_bpu_pc_r;
+    reg [ 7:0] upd_bpu_ghr_r;
+    reg [ 1:0] upd_bpu_br_type_r;
+    reg        upd_bpu_taken_r;
+    reg [31:0] upd_bpu_target_r;
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            upd_bpu_en_r      <= 1'b0;
+            upd_bpu_pc_r      <= 32'd0;
+            upd_bpu_ghr_r     <= 8'd0;
+            upd_bpu_br_type_r <= 2'd0;
+            upd_bpu_taken_r   <= 1'b0;
+            upd_bpu_target_r  <= 32'd0;
+        end else begin
+            upd_bpu_en_r      <= upd_bpu_en;
+            upd_bpu_pc_r      <= upd_bpu_pc;
+            upd_bpu_ghr_r     <= upd_bpu_ghr;
+            upd_bpu_br_type_r <= upd_bpu_br_type;
+            upd_bpu_taken_r   <= upd_bpu_taken;
+            upd_bpu_target_r  <= upd_bpu_target;
+        end
+    end
+
+    // ==========================================
     // IF 阶段
     // ==========================================
     wire [31:0] if_pc, id_br_target;
-    wire        id_br_taken, if_req_fire;
+    wire         id_br_taken, if_req_fire;
 
     bpu _bpu (
         .clk(clk), .resetn(resetn),
         .pc(if_pc), .pred_taken(if_pred_taken), .pred_target(if_pred_target), .pred_ghr(if_pred_ghr),
-        .upd_en(upd_bpu_en), .upd_pc(upd_bpu_pc), .upd_ghr(upd_bpu_ghr),
-        .upd_br_type(upd_bpu_br_type),
-        .upd_actually_taken(upd_bpu_taken), .upd_target(upd_bpu_target),
+        .upd_en(upd_bpu_en_r), .upd_pc(upd_bpu_pc_r), .upd_ghr(upd_bpu_ghr_r),
+        .upd_br_type(upd_bpu_br_type_r),
+        .upd_actually_taken(upd_bpu_taken_r), .upd_target(upd_bpu_target_r),
         .stat_btb_hits(stat_btb_hits), .stat_cond_preds(stat_cond_preds), .stat_pred_correct(stat_pred_correct), .stat_pred_wrong(stat_pred_wrong),
         .stat_loop_overrides(stat_loop_overrides), .stat_ret_preds(stat_ret_preds), .stat_ret_correct(stat_ret_correct), .stat_ret_wrong(stat_ret_wrong), .stat_ras_fallbacks(stat_ras_fallbacks), .stat_ras_valid_preds(stat_ras_valid_preds),
         .stat_loop_hits(stat_loop_hits), .stat_loop_confident(stat_loop_confident), .stat_loop_correct(stat_loop_correct), .stat_loop_wrong(stat_loop_wrong),
@@ -163,7 +191,7 @@ module cpu(
         .clk(clk), .resetn(resetn), .stall_if(stall[0]),
         .id_pred_wrong(id_br_taken), .id_correct_pc(id_br_target),
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
-        .inst_sram_en(internal_inst_en),       
+        .inst_sram_en(internal_inst_en),        
         .inst_sram_addr(internal_inst_addr),   
         .if_pc(if_pc), .if_req_fire(if_req_fire)
     );
@@ -186,12 +214,12 @@ module cpu(
     end
 
     wire [31:0] id_pc, id_inst;
-    wire        id_valid;
+    wire         id_valid;
     
-    wire        if_id_valid_in       = inst_buf_valid ? 1'b1                 : inst_data_ok_real;
+    wire         if_id_valid_in       = inst_buf_valid ? 1'b1                : inst_data_ok_real;
     wire [31:0] if_id_pc_in          = inst_buf_valid ? inst_buf_pc          : if_pc;
     wire [31:0] if_id_inst_in        = inst_buf_valid ? inst_buf_data        : inst_sram_rdata;
-    wire        if_id_pred_taken_in  = inst_buf_valid ? inst_buf_pred_taken  : if_pred_taken;
+    wire         if_id_pred_taken_in  = inst_buf_valid ? inst_buf_pred_taken  : if_pred_taken;
     wire [31:0] if_id_pred_target_in = inst_buf_valid ? inst_buf_pred_target : if_pred_target;
     wire [7:0]  if_id_pred_ghr_in    = inst_buf_valid ? inst_buf_pred_ghr    : if_pred_ghr;
 
@@ -207,18 +235,18 @@ module cpu(
     // ==========================================
     // ID 阶段
     // ==========================================
-    wire        wb_rf_we, ex_rf_we, mem_rf_we;
+    wire         wb_rf_we, ex_rf_we, mem_rf_we;
     wire [ 4:0] wb_waddr, ex_waddr, mem_waddr;
     wire [31:0] wb_data, ex_result, mem_final_data;
 
-    wire        id_rf_we, id_mem_en, id_is_st_w, id_is_st_b, id_is_ld_b, id_is_ld_bu, id_is_branch;
+    wire         id_rf_we, id_mem_en, id_is_st_w, id_is_st_b, id_is_ld_b, id_is_ld_bu, id_is_branch;
     wire [ 1:0] id_wb_sel;
     wire [ 4:0] id_waddr, id_rs1, id_rs2;
     wire [11:0] id_alu_op; 
     wire [31:0] id_alu_src1, id_alu_src2, id_rdata2;
 
     stage_id _stage_id (
-        .clk(clk), .resetn(resetn), .stall_id(stall[1]),
+        .clk(clk), .resetn(resetn), .stall_id(stall[1]), .ex_fw_valid(ex_fw_valid),
         .id_pc(id_pc), .id_inst(safe_id_inst),
         .wb_rf_we(wb_rf_we), .wb_waddr(wb_waddr), .wb_data(wb_data),
         .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_result(ex_result),
@@ -236,7 +264,8 @@ module cpu(
 
     wire [31:0] ex_pc, ex_alu_src1, ex_alu_src2, ex_rdata2;
     wire [ 1:0] ex_wb_sel;
-    wire        ex_mem_en, ex_is_st_w, ex_is_st_b, ex_is_ld_b, ex_is_ld_bu; 
+    wire         ex_mem_en, ex_is_st_w, ex_is_st_b, ex_is_ld_b, ex_is_ld_bu;
+    wire         ex_fw_valid;
     wire [11:0] ex_alu_op;  
 
     id_ex_reg _id_ex_reg (
@@ -256,30 +285,37 @@ module cpu(
     // ==========================================
     wire [ 1:0] ex_addr_align;
     wire        ex_mem_read;
+    wire [31:0] ex_mul_result;
+    wire        ex_is_mul = (ex_wb_sel == 2'b10);
+    assign ex_fw_valid = !ex_is_mul && !ex_mem_read;
 
     stage_ex _stage_ex (
+        .clk(clk),
+        .resetn(resetn),
         .ex_pc(ex_pc), .ex_wb_sel(ex_wb_sel), .ex_mem_en(ex_mem_en),
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
-        .ex_result(ex_result), .ex_addr_align(ex_addr_align),
-        .data_sram_en(internal_data_en),       
+        .ex_result(ex_result), .ex_mul_result(ex_mul_result), .ex_addr_align(ex_addr_align),
+        .data_sram_en(internal_data_en),
         .data_sram_wen(internal_data_wen),     
         .data_sram_addr(internal_data_addr),   
         .data_sram_wdata(internal_data_wdata), 
         .ex_mem_read(ex_mem_read)
     );
 
-    wire [31:0] mem_pc, mem_result;
+    wire [31:0] mem_pc, mem_result, mem_mul_result;
     wire [ 1:0] mem_wb_sel, mem_addr_align;
-    wire        mem_is_ld_b, mem_is_ld_bu, mem_valid;
+    wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
+
+    assign mem_mul_result = ex_mul_result;
 
     ex_mem_reg _ex_mem_reg (
         .clk(clk), .resetn(resetn), .stall(stall[2]), .flush(flush[3]),
         .ex_pc(ex_pc), .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
-        .ex_is_ld_b(ex_is_ld_b), .ex_is_ld_bu(ex_is_ld_bu), 
+        .ex_is_ld_b(ex_is_ld_b), .ex_is_ld_bu(ex_is_ld_bu),
         .ex_addr_align(ex_addr_align), .ex_result(ex_result),
         .mem_pc(mem_pc), .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_wb_sel(mem_wb_sel),
-        .mem_is_ld_b(mem_is_ld_b), .mem_is_ld_bu(mem_is_ld_bu), 
+        .mem_is_ld_b(mem_is_ld_b), .mem_is_ld_bu(mem_is_ld_bu),
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid)
     );
 
@@ -295,12 +331,12 @@ module cpu(
     wire mem_done;
 
     stage_mem _stage_mem (
-        .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b), 
-        .mem_is_ld_bu(mem_is_ld_bu), 
-        .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid),
-        .data_sram_rdata(data_rdata_buf),             
-        .data_sram_resp_valid(1'b1),                 
-        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait() 
+        .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b),
+        .mem_is_ld_bu(mem_is_ld_bu),
+        .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_mul_result(mem_mul_result), .mem_valid(mem_valid),
+        .data_sram_rdata(data_rdata_buf),
+        .data_sram_resp_valid(1'b1),
+        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait()
     );
 
     wire [31:0] wb_pc;
@@ -324,7 +360,7 @@ module cpu(
     // ==========================================
     hazard_ctrl _hazard_ctrl (
         .id_is_branch(id_is_branch), .id_rs1(id_rs1), .id_rs2(id_rs2),
-        .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read),
+        .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read), .ex_is_mul(ex_is_mul),
         .id_br_taken(id_br_taken),
         .if_wait(inst_sram_wait),  
         .mem_wait(mem_wait),       

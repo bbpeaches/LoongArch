@@ -1,6 +1,4 @@
-
-// 
-// (c) Copyright 2008 - 2013 Xilinx, Inc. All rights reserved.
+// (c) Copyright 1995-2026 Xilinx, Inc. All rights reserved.
 // 
 // This file contains confidential and proprietary information
 // of Xilinx, Inc. and is protected under U.S. and
@@ -46,37 +44,25 @@
 // THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
 // PART OF THIS FILE AT ALL TIMES.
 // 
-//----------------------------------------------------------------------------
-// User entered comments
-//----------------------------------------------------------------------------
-// None
-//
-//----------------------------------------------------------------------------
-//  Output     Output      Phase    Duty Cycle   Pk-to-Pk     Phase
-//   Clock     Freq (MHz)  (degrees)    (%)     Jitter (ps)  Error (ps)
-//----------------------------------------------------------------------------
-// clk_out1__150.00000______0.000______50.0______144.436____164.344
-// clk_out2__50.00000______0.000______50.0______187.143____164.344
-//
-//----------------------------------------------------------------------------
-// Input Clock   Freq (MHz)    Input Jitter (UI)
-//----------------------------------------------------------------------------
-// __primary______________50____________0.010
+// DO NOT MODIFY THIS FILE.
+
+// IP VLNV: xilinx.com:ip:mult_gen:12.0
+// IP Revision: 16
 
 // The following must be inserted into your Verilog file for this
 // core to be instantiated. Change the instance name and port connections
 // (in parentheses) to your own signal names.
 
 //----------- Begin Cut here for INSTANTIATION Template ---// INST_TAG
-
-  pll_example instance_name
-   (
-    // Clock out ports
-    .clk_out1(clk_out1),     // output clk_out1
-    .clk_out2(clk_out2),     // output clk_out2
-    // Status and control signals
-    .reset(reset), // input reset
-    .locked(locked),       // output locked
-   // Clock in ports
-    .clk_in1(clk_in1));      // input clk_in1
+mult_gen_0 your_instance_name (
+  .CLK(CLK),  // input wire CLK
+  .A(A),      // input wire [31 : 0] A
+  .B(B),      // input wire [31 : 0] B
+  .P(P)      // output wire [63 : 0] P
+);
 // INST_TAG_END ------ End INSTANTIATION Template ---------
+
+// You must compile the wrapper file mult_gen_0.v when simulating
+// the core, mult_gen_0. When compiling the wrapper file, be sure to
+// reference the Verilog simulation library.
+

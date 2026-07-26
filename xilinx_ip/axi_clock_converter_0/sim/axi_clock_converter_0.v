@@ -316,7 +316,7 @@ output wire m_axi_rready;
     .C_AXI_ID_WIDTH(4),
     .C_AXI_ADDR_WIDTH(32),
     .C_AXI_DATA_WIDTH(32),
-    .C_S_AXI_ACLK_RATIO(2),
+    .C_S_AXI_ACLK_RATIO(3),
     .C_M_AXI_ACLK_RATIO(1),
     .C_AXI_IS_ACLK_ASYNC(0),
     .C_AXI_PROTOCOL(0),

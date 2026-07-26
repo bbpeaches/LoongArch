@@ -1,34 +1,21 @@
 module mul_top (
+    input  wire        clk,     // 需要引入时钟
+    input  wire        resetn,
     input  wire [31:0] x,       // 被乘数 rj
     input  wire [31:0] y,       // 乘数 rk
     output wire [31:0] result   // 乘法结果 rd
 );
-    wire [32:0] y_ext = {y, 1'b0};
-    wire [32:0] pp [0:15]; 
-    wire [15:0] neg_c;
-    genvar i;
-    generate
-        for (i = 0; i < 16; i = i + 1) begin : gen_booth
-            booth_radix4_encoder #(
-                .WIDTH(32)
-            ) _booth (
-                .x      (x),
-                .y_vec  (y_ext[i*2+2 : i*2]), 
-                .p      (pp[i]),
-                .neg_c  (neg_c[i])
-            );
-        end
-    endgenerate
 
-    reg [63:0] sum_all;
-    integer j;
-    
-    always @(*) begin
-        sum_all = 64'b0;
-        for (j = 0; j < 16; j = j + 1) begin
-            sum_all = sum_all + ( ({{31{pp[j][32]}}, pp[j]} + neg_c[j]) << (j * 2) );
-        end
-    end
-    assign result = sum_all[31:0];
+    wire [63:0] mult_result_full;
+
+    mult_gen_0 u_mult (
+        .CLK (clk),
+        .A   (x),
+        .B   (y),
+        .P   (mult_result_full)
+    );
+
+    // 截取低 32 位
+    assign result = mult_result_full[31:0];
 
 endmodule
