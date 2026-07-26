@@ -139,7 +139,7 @@ module stage_id (
                       (actual_taken && !id_pred_taken) || 
                       (actual_taken && (actual_target != id_pred_target));
 
-    assign id_br_taken  = pred_wrong && !stall_id && !id_invalid;
+    assign id_br_taken  = pred_wrong && !id_invalid;
     assign id_br_target = actual_taken ? actual_target : (id_pc + 32'd4);
 
     wire is_call = is_bl | (is_jirl & (id_waddr_raw == 5'd1));
