@@ -23,7 +23,10 @@ module icache_way (
     // 1. Tag BRAM (128深度 x 20位宽)
     // ==========================================
     simple_dual_port_ram #(
-        .WIDTH(20), .DEPTH(128), .ADDR_WIDTH(7)
+        .WIDTH(20), 
+        .DEPTH(128), 
+        .ADDR_WIDTH(7),
+        .RAM_STYLE("distributed")
     ) tag_ram (
         .clk    (clk),
         .r_en   (r_en),       .r_addr (r_index), .r_data (r_tag_out),

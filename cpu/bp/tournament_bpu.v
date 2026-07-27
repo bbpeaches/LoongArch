@@ -4,11 +4,11 @@ module tournament_bpu (
 
     // --- 预测读取端口 ---
     input  wire [9:2]  pc,
-    output wire        meta_taken, // 裁判最终决定的方向
+    output wire        meta_taken, 
     output wire [ 7:0] fetch_ghr,
 
     // --- 训练更新端口 ---
-    input  wire        upd_cond_en, // 只有条件分支才使能
+    input  wire        upd_cond_en, 
     input  wire [9:2]  upd_pc,
     input  wire [ 7:0] upd_ghr,
     input  wire        upd_actually_taken
@@ -34,15 +34,10 @@ module tournament_bpu (
     wire [ 7:0] upd_pht_idx = upd_pc[9:2];
     wire [ 7:0] upd_gsh_idx = upd_pc[9:2] ^ upd_ghr;
 
-    integer i;
     always @(posedge clk) begin
         if (~resetn) begin
             ghr <= 8'b0;
-            for (i = 0; i < 256; i = i + 1) begin
-                bimodal_pht[i] <= 2'b01;
-                gshare_pht[i]  <= 2'b01;
-                chooser_pht[i] <= 2'b10;
-            end
+            
         end
         else if (upd_cond_en) begin
             if ( (bimodal_pht[upd_pht_idx][1] == upd_actually_taken) && (gshare_pht[upd_gsh_idx][1] != upd_actually_taken) ) begin

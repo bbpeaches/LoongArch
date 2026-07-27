@@ -86,6 +86,10 @@ module stage_ex (
     wire [31:0] jirl_br_target   = ex_alu_src1 + ex_imm;
     wire [31:0] actual_target    = is_jirl ? jirl_br_target : ex_normal_br_target; 
 
+    wire jirl_target_wrong   = (jirl_br_target != ex_pred_target);
+    wire normal_target_wrong = (ex_normal_br_target != ex_pred_target);
+    wire target_wrong        = is_jirl ? jirl_target_wrong : normal_target_wrong; 
+
     wire actual_taken = (inst_b | is_bl | is_jirl |
                          (inst_beq  & ex_rj_eq_rd) |
                          (inst_bne  & ~ex_rj_eq_rd) |
@@ -94,12 +98,11 @@ module stage_ex (
                          (inst_bltu & ex_rj_lt_rd_unsigned) |
                          (inst_bgeu & ~ex_rj_lt_rd_unsigned));
 
-    wire pred_wrong = (ex_pred_taken && !actual_taken) || 
-                      (actual_taken && !ex_pred_taken) || 
-                      (actual_taken && (actual_target != ex_pred_target));
+    wire pred_wrong = (ex_pred_taken != actual_taken) || (actual_taken && target_wrong);
 
-    // 只有在 EX 不被堵住的情况下，才允许发冲刷信号
-    assign ex_br_taken  = pred_wrong && ex_valid_inst && !stall_ex;
+    (* max_fanout = 32 *) wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
+
+    assign ex_br_taken  = ex_br_taken_opt;
     assign ex_br_target = actual_taken ? actual_target : (ex_pc + 32'd4);
 
     assign upd_bpu_en          = (ex_is_branch || ex_pred_taken) && ex_valid_inst && !stall_ex;

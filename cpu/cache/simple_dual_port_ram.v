@@ -1,7 +1,8 @@
 module simple_dual_port_ram #(
     parameter WIDTH = 32,
     parameter DEPTH = 128,
-    parameter ADDR_WIDTH = 7
+    parameter ADDR_WIDTH = 7,
+    parameter RAM_STYLE = "block"
 )(
     input  wire                  clk,
     // Read port
@@ -13,12 +14,10 @@ module simple_dual_port_ram #(
     input  wire [ADDR_WIDTH-1:0] w_addr,
     input  wire [WIDTH-1:0]      w_data
 );
-
-    // 强制指示 Vivado 综合器使用底层的 Block RAM 资源
-    (* ram_style = "block" *)
+    (* ram_style = RAM_STYLE *)
     reg [WIDTH-1:0] ram [0:DEPTH-1];
 
-    // 同步读：打一拍输出，完全符合 BRAM 时序
+    // 同步读
     always @(posedge clk) begin
         if (r_en) begin
             r_data <= ram[r_addr];
