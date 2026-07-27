@@ -398,9 +398,11 @@ module cpu(
     // Hazard Ctrl
     // ==========================================
     hazard_ctrl _hazard_ctrl (
-        .clk           (clk),           
-        .resetn        (resetn),        
-        .ex_valid_inst (ex_valid_inst), 
+        .clk           (clk),
+        .resetn        (resetn),
+        .ex_valid_inst (ex_valid_inst),
+        .id_valid      (id_valid),     
+        .id_inst       (id_inst),       
         
         .id_rs1(id_rs1), .id_rs2(id_rs2),
         .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read), .ex_is_mul(ex_is_mul),

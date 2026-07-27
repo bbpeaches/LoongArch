@@ -1,7 +1,5 @@
 module mem_wb_reg (
-    input  wire        clk, resetn,
-    input  wire        stall,
-    input  wire        flush,
+    input  wire        clk, resetn, stall, flush,
 
     input  wire [31:0] mem_pc,
     input  wire        mem_rf_we,
@@ -16,13 +14,19 @@ module mem_wb_reg (
 );
     always @(posedge clk) begin
         if (~resetn) begin
-            wb_pc <= 32'd0; wb_rf_we <= 1'b0; wb_waddr <= 5'd0; wb_data <= 32'd0;
+            wb_rf_we <= 1'b0;
         end else if (flush) begin
-            // 仅清除写使能
             wb_rf_we <= 1'b0;
         end else if (!stall) begin
-            wb_pc <= mem_pc;
             wb_rf_we <= mem_done ? mem_rf_we : 1'b0;
+        end
+    end
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            wb_pc <= 32'd0; wb_waddr <= 5'd0; wb_data <= 32'd0;
+        end else if (!stall) begin
+            wb_pc <= mem_pc;
             wb_waddr <= mem_waddr;
             wb_data <= mem_final_data;
         end
