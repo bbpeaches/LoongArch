@@ -1,9 +1,6 @@
 module cpu(
     input         clk, resetn,
     
-    // ==========================================
-    // Inst SRAM (类SRAM握手接口)
-    // ==========================================
     output         inst_sram_req,
     output         inst_sram_wr,
     output [ 1:0]  inst_sram_size,
@@ -14,9 +11,6 @@ module cpu(
     input          inst_sram_data_ok,
     input  [31:0]  inst_sram_rdata,
     
-    // ==========================================
-    // Data SRAM (类SRAM握手接口)
-    // ==========================================
     output         data_sram_req,
     output         data_sram_wr,
     output [ 1:0]  data_sram_size,
@@ -27,9 +21,6 @@ module cpu(
     input          data_sram_data_ok,
     input  [31:0]  data_sram_rdata,
     
-    // ==========================================
-    // Debug 接口
-    // ==========================================
     output [31:0]  debug_wb_pc,
     output         debug_wb_rf_wen,
     output [ 4:0]  debug_wb_rf_wnum,
@@ -38,9 +29,6 @@ module cpu(
     wire [4:0] stall;
     wire [4:0] flush;
 
-    // ==========================================
-    // 取指类SRAM握手转接与缓存逻辑
-    // ==========================================
     wire         internal_inst_en;
     wire [31:0] internal_inst_addr;
     wire         inst_sram_wait;
@@ -62,10 +50,8 @@ module cpu(
         end
     end
 
-    // 只有当 discard_cnt 归零时的 data_ok，才是真正属于当前 PC 的安全数据
     wire inst_data_ok_real = inst_sram_data_ok && (inst_discard_cnt == 0);
 
-    // 使用安全的 data_ok_real 管理地址握手状态
     always @(posedge clk) begin
         if (~resetn || flush[1]) begin
             inst_addr_rcv <= 1'b0;
@@ -92,9 +78,6 @@ module cpu(
 
     assign inst_sram_wait  = internal_inst_en & ~inst_data_ok_real & ~inst_buf_valid;
 
-    // ==========================================
-    // 访存类SRAM握手转接逻辑
-    // ==========================================
     wire         internal_data_en;
     wire [ 3:0] internal_data_wen;
     wire [31:0] internal_data_addr;
@@ -127,14 +110,10 @@ module cpu(
 
     assign mem_wait = internal_data_en & ~data_sram_data_ok;
 
-    // ==========================================
-    // 分支预测单元全局线
-    // ==========================================
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
     wire [7:0]  if_pred_ghr, id_pred_ghr;
     
-    // 由 EX 阶段传来的预测修正与更新线
     wire         upd_bpu_en, upd_bpu_taken;
     wire [ 1:0] upd_bpu_br_type;
     wire [7:0]  upd_bpu_ghr;
@@ -146,9 +125,6 @@ module cpu(
     wire [31:0] stat_loop_overrides, stat_ret_preds, stat_ret_correct, stat_ret_wrong, stat_ras_fallbacks, stat_ras_valid_preds;
     wire [31:0] stat_loop_hits, stat_loop_confident, stat_loop_correct, stat_loop_wrong, stat_loop_override_taken, stat_loop_override_wrong;
 
-    // ==========================================
-    // BPU 更新信号流水线寄存器 (切断 EX -> BPU 组合逻辑长路径)
-    // ==========================================
     reg        upd_bpu_en_r;
     reg [31:0] upd_bpu_pc_r;
     reg [ 7:0] upd_bpu_ghr_r;
@@ -248,7 +224,6 @@ module cpu(
     wire [11:0] id_alu_op; 
     wire [31:0] id_alu_src1, id_alu_src2, id_rdata2;
     
-    // ID 阶段解耦出的打包信息
     wire [31:0] id_imm;
     wire [11:0] id_br_info;
     wire        id_valid_inst;
@@ -279,7 +254,6 @@ module cpu(
     wire         ex_fw_valid;
     wire [11:0] ex_alu_op;  
     
-    // EX 阶段接收的流水线分支信号
     wire [31:0] ex_imm;
     wire [11:0] ex_br_info;
     wire        ex_is_branch, ex_pred_taken, ex_valid_inst;

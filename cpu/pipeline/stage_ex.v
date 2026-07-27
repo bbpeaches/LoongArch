@@ -1,7 +1,7 @@
 module stage_ex (
     input  wire        clk,
     input  wire        resetn,
-    input  wire        stall_ex, // 接收 stall[2]
+    input  wire        stall_ex,
 
     input  wire [31:0] ex_pc,
     input  wire [ 1:0] ex_wb_sel,
@@ -13,7 +13,6 @@ module stage_ex (
     input  wire [31:0] ex_alu_src2,
     input  wire [31:0] ex_rdata2,
 
-    // --- 接收 ID 传来的分支信息 ---
     input  wire [31:0] ex_imm,
     input  wire [11:0] ex_br_info,
     input  wire        ex_is_branch,
@@ -33,7 +32,6 @@ module stage_ex (
     output wire [31:0] data_sram_wdata,
     output wire        ex_mem_read,
 
-    // --- 产生冲刷和 BPU 更新信号 ---
     output wire        ex_br_taken,
     output wire [31:0] ex_br_target,
     output wire        upd_bpu_en,
@@ -58,9 +56,6 @@ module stage_ex (
         .result(ex_mul_result)
     );
 
-    // ==========================================
-    // EX 阶段分支解析逻辑 (Branch Resolution)
-    // ==========================================
     wire inst_b = ex_br_info[11];
     wire inst_beq = ex_br_info[10];
     wire inst_bne = ex_br_info[9];
@@ -114,9 +109,6 @@ module stage_ex (
     assign upd_bpu_taken       = actual_taken;
     assign upd_bpu_target      = actual_target;
 
-    // ==========================================
-    // EX 阶段访存和写回逻辑
-    // ==========================================
     assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;
     assign ex_addr_align = ex_alu_result[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;

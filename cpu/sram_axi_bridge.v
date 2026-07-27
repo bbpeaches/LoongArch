@@ -4,9 +4,6 @@ module sram_axi_bridge(
     input  wire        clk,
     input  wire        resetn,
 
-    // ==========================================
-    // I-Cache AXI 接口 (AR & R)
-    // ==========================================
     input  wire [31:0] icache_araddr,
     input  wire        icache_arvalid,
     output wire        icache_arready,
@@ -16,9 +13,6 @@ module sram_axi_bridge(
     output wire        icache_rvalid,
     input  wire        icache_rready,
 
-    // ==========================================
-    // Data SRAM-like (来自 CPU 访存/写缓冲)
-    // ==========================================
     input  wire        data_req,
     input  wire        data_wr,
     input  wire [ 1:0] data_size,
@@ -29,9 +23,6 @@ module sram_axi_bridge(
     output wire        data_data_ok,
     output wire [31:0] data_rdata,
 
-    // ==========================================
-    // AXI 接口 (对接外部 SoC)
-    // ==========================================
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
     output wire [ 7:0] arlen,
@@ -74,9 +65,6 @@ module sram_axi_bridge(
     output wire        bready
 );
 
-    // ==========================================
-    // 1. AR 通道（读请求）: 仲裁 (Data 优先)
-    // ==========================================
     wire data_r_data_ok = rvalid && rready && (rid == 4'd1);
     reg data_ar_acc;
     
@@ -112,9 +100,7 @@ module sram_axi_bridge(
     assign arid    = holding_ar ? held_arid  : (do_data_ar ? 4'd1 : 4'd0);
     assign araddr  = holding_ar ? held_araddr : (do_data_ar ? data_addr : icache_araddr);
     assign arsize  = holding_ar ? held_arsize : (do_data_ar ? {1'b0, data_size} : 3'd2);
-    // I-Cache 发起 8 次读突发 (arlen=7)，Data 依然是单次读 (arlen=0)
     assign arlen   = holding_ar ? held_arlen   : (do_data_ar ? 8'd0 : 8'd7);
-    // I-Cache 使用 WRAP 回环模式 (2'b10)，Data 使用 INCR (2'b01)
     assign arburst = holding_ar ? held_arburst : (do_data_ar ? 2'b01 : 2'b10);
     
     assign arlock  = 2'd0;
@@ -122,9 +108,6 @@ module sram_axi_bridge(
     assign arprot  = 3'd0;
     assign icache_arready = arvalid && arready && (arid == 4'd0);
 
-    // ==========================================
-    // 2. AW & W 通道（写请求与写数据）: 仅供 Data SRAM 使用
-    // ==========================================
     wire data_req_w = data_req && data_wr;
 
     reg aw_sent, w_sent;
@@ -187,9 +170,6 @@ module sram_axi_bridge(
 
     assign data_addr_ok = (arvalid && arready && (arid == 4'd1)) || (data_req_w && write_addr_ok);
 
-    // ==========================================
-    // 3. R & B 通道（响应处理）
-    // ==========================================
     assign rready = (rvalid && rid == 4'd0) ? icache_rready : 1'b1; 
     assign bready = 1'b1;
 

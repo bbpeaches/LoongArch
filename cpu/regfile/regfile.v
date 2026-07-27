@@ -1,19 +1,15 @@
 module regfile(
     input  wire        clk,
-    // 读端口 1
     input  wire [4:0]  raddr1,
     output wire [31:0] rdata1,
-    // 读端口 2
     input  wire [4:0]  raddr2,
     output wire [31:0] rdata2,
-    // 写端口
     input  wire        we,
     input  wire [4:0]  waddr,
     input  wire [31:0] wdata
 );
     reg [31:0] rf [31:0];
 
-    // 同步写：等时钟上升沿才更新
     always @(posedge clk) begin
         if (we && (waddr != 5'd0)) begin
             rf[waddr] <= wdata;

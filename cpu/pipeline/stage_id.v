@@ -33,7 +33,6 @@ module stage_id (
     output wire [ 4:0] id_rs1,
     output wire [ 4:0] id_rs2,
 
-    // --- 传给 EX 的额外信息 ---
     output wire [31:0] id_imm,
     output wire [11:0] id_br_info,
     output wire        id_is_branch,
@@ -103,7 +102,6 @@ module stage_id (
     wire is_call = is_bl | (is_jirl & (id_waddr_raw == 5'd1));
     wire is_ret  = is_jirl & (dec_rs1 == 5'd1) & (id_waddr_raw == 5'd0);
     
-    // 打包分支信息传递给 EX
     assign id_br_info = {
         inst_b, inst_beq, inst_bne, inst_blt, inst_bge, inst_bltu, inst_bgeu,
         is_bl, is_jirl, is_call, is_ret, inst_cond_branch

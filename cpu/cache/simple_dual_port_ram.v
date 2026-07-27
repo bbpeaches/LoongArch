@@ -5,11 +5,11 @@ module simple_dual_port_ram #(
     parameter RAM_STYLE = "block"
 )(
     input  wire                  clk,
-    // Read port
+
     input  wire                  r_en,
     input  wire [ADDR_WIDTH-1:0] r_addr,
     output reg  [WIDTH-1:0]      r_data,
-    // Write port
+
     input  wire                  w_en,
     input  wire [ADDR_WIDTH-1:0] w_addr,
     input  wire [WIDTH-1:0]      w_data

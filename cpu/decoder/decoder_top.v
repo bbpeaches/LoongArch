@@ -78,10 +78,7 @@ module decoder_top (
     assign inst_bltu    = (op_6  == 6'b0110_10);
     assign inst_bgeu    = (op_6  == 6'b0110_11);
     
-    // rj 永远在 inst[9:5]，直接盲读
     assign rf_raddr1 = inst[9:5];   
-
-    // 直接用高 6 位和高 10 位的硬编码粗略判断 rkd，避开慢速译码链
     wire fast_dest_is_raddr2 = (inst[31:26] == 6'b0101_10) | // beq
                                (inst[31:26] == 6'b0101_11) | // bne
                                (inst[31:26] == 6'b0110_00) | // blt

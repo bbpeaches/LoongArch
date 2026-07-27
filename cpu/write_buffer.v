@@ -4,9 +4,6 @@ module write_buffer #(
     input  wire        clk,
     input  wire        resetn,
 
-    // ==========================================
-    // CPU 端接口 (Slave)
-    // ==========================================
     input  wire        cpu_req,
     input  wire        cpu_wr,
     input  wire [ 1:0] cpu_size,
@@ -17,9 +14,6 @@ module write_buffer #(
     output wire        cpu_data_ok,
     output wire [31:0] cpu_rdata,
 
-    // ==========================================
-    // Memory/AXI 桥端接口 (Master)
-    // ==========================================
     output wire        mem_req,
     output wire        mem_wr,
     output wire [ 1:0] mem_size,
@@ -31,9 +25,6 @@ module write_buffer #(
     input  wire [31:0] mem_rdata
 );
 
-    // ------------------------------------
-    // 写队列 (FIFO) 定义
-    // ------------------------------------
     reg [31:0] buf_addr  [0:DEPTH-1];
     reg [31:0] buf_wdata [0:DEPTH-1];
     reg [ 3:0] buf_wstrb [0:DEPTH-1];
@@ -48,18 +39,12 @@ module write_buffer #(
     wire buf_empty = (count == 3'd0);
     wire has_conflict = !buf_empty;
 
-    // ------------------------------------
-    // CPU 请求分流与判定
-    // ------------------------------------
     wire load_req  = cpu_req && !cpu_wr;
     wire store_req = cpu_req && cpu_wr;
 
     wire load_ready_to_go  = load_req && !has_conflict;
     wire store_ready_to_go = !buf_empty;
 
-    // ------------------------------------
-    // Memory 总线控制状态机
-    // ------------------------------------
     localparam S_IDLE     = 2'd0;
     localparam S_DO_LOAD  = 2'd1;
     localparam S_DO_STORE = 2'd2;
@@ -158,7 +143,6 @@ module write_buffer #(
                 head <= head + 2'd1;
             end
 
-            // 同步计数器维护
             case ({store_push, store_pop})
                 2'b10: count <= count + 3'd1;
                 2'b01: count <= count - 3'd1;
