@@ -1,13 +1,15 @@
 module ctrl (
-    input  wire       stall_from_id,
-    input  wire       stall_from_if,
-    input  wire       stall_from_mem,
-    input  wire       flush_from_ex,
+    input  wire        stall_from_ex, 
+    input  wire        stall_from_id,
+    input  wire        stall_from_if,
+    input  wire        stall_from_mem,
+    input  wire        flush_from_ex,
 
     output wire [4:0] stall,
     output wire [4:0] flush
 );
     assign stall = stall_from_mem ? 5'b00111 :
+                   stall_from_ex  ? 5'b00111 : 
                    stall_from_id  ? 5'b00011 :
                    stall_from_if  ? 5'b00001 : 5'b00000;
 

@@ -122,7 +122,7 @@ BEGIN
       C_XDEVICEFAMILY => "artix7",
       C_HAS_CE => 1,
       C_HAS_SCLR => 0,
-      C_LATENCY => 1,
+      C_LATENCY => 2,
       C_A_WIDTH => 32,
       C_A_TYPE => 0,
       C_B_WIDTH => 32,

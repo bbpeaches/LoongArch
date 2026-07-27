@@ -21,7 +21,7 @@ module stage_ex (
     input  wire [31:0] ex_pred_target,
     input  wire [ 7:0] ex_pred_ghr,
     input  wire        ex_valid_inst,
-    input  wire [31:0] ex_normal_br_target, // <-- 新增：接收预计算的目标地址
+    input  wire [31:0] ex_normal_br_target, 
 
     output wire [31:0] ex_result,
     output wire [31:0] ex_mul_result,
@@ -50,7 +50,12 @@ module stage_ex (
     );
 
     mul_top _mul_top (
-        .clk(clk), .ce(!stall_ex), .resetn(resetn), .x(ex_alu_src1), .y(ex_alu_src2), .result(ex_mul_result)
+        .clk(clk), 
+        .ce(1'b1),
+        .resetn(resetn), 
+        .x(ex_alu_src1), 
+        .y(ex_alu_src2), 
+        .result(ex_mul_result)
     );
 
     // ==========================================
@@ -78,7 +83,6 @@ module stage_ex (
         .is_ltu(ex_rj_lt_rd_unsigned)
     );
 
-    // <-- 修改点：直接使用前递进来的 target，避开 EX 阶段内运算
     wire [31:0] jirl_br_target   = ex_alu_src1 + ex_imm;
     wire [31:0] actual_target    = is_jirl ? jirl_br_target : ex_normal_br_target; 
 

@@ -194,7 +194,7 @@ module cpu(
 
     stage_if _stage_if (
         .clk(clk), .resetn(resetn), .stall_if(stall[0]),
-        .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), // <--- 直接接收 EX 的冲刷地址
+        .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), 
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
         .inst_sram_en(internal_inst_en),        
         .inst_sram_addr(internal_inst_addr),   
@@ -221,7 +221,7 @@ module cpu(
     wire [31:0] id_pc, id_inst;
     wire         id_valid;
     
-    wire         if_id_valid_in       = inst_buf_valid ? 1'b1                : inst_data_ok_real;
+    wire         if_id_valid_in       = inst_buf_valid ? 1'b1               : inst_data_ok_real;
     wire [31:0] if_id_pc_in          = inst_buf_valid ? inst_buf_pc          : if_pc;
     wire [31:0] if_id_inst_in        = inst_buf_valid ? inst_buf_data        : inst_sram_rdata;
     wire         if_id_pred_taken_in  = inst_buf_valid ? inst_buf_pred_taken  : if_pred_taken;
@@ -252,7 +252,7 @@ module cpu(
     wire [31:0] id_imm;
     wire [11:0] id_br_info;
     wire        id_valid_inst;
-    wire [31:0] id_normal_br_target; // <-- 新增的传递网线
+    wire [31:0] id_normal_br_target;
 
     stage_id _stage_id (
         .clk(clk), .resetn(resetn), .ex_fw_valid(ex_fw_valid),
@@ -269,9 +269,8 @@ module cpu(
         .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
         .id_rs1(id_rs1), .id_rs2(id_rs2),
         
-        // 传递给下一级的打包信号
         .id_imm(id_imm), .id_br_info(id_br_info), .id_is_branch(id_is_branch), .id_valid_inst(id_valid_inst),
-        .id_normal_br_target(id_normal_br_target) // <-- 新增连接
+        .id_normal_br_target(id_normal_br_target) 
     );
 
     wire [31:0] ex_pc, ex_alu_src1, ex_alu_src2, ex_rdata2;
@@ -286,7 +285,7 @@ module cpu(
     wire        ex_is_branch, ex_pred_taken, ex_valid_inst;
     wire [31:0] ex_pred_target;
     wire [ 7:0] ex_pred_ghr;
-    wire [31:0] ex_normal_br_target; // <-- 新增的传递网线
+    wire [31:0] ex_normal_br_target; 
 
     id_ex_reg _id_ex_reg (
         .clk(clk), .resetn(resetn), .stall(stall[1]), .flush(flush[2]),
@@ -295,20 +294,18 @@ module cpu(
         .id_is_ld_bu(id_is_ld_bu),
         .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
         
-        // ID 侧打入
         .id_imm(id_imm), .id_br_info(id_br_info), .id_is_branch(id_is_branch),
         .id_pred_taken(id_pred_taken), .id_pred_target(id_pred_target), .id_pred_ghr(id_pred_ghr), .id_valid_inst(id_valid_inst),
-        .id_normal_br_target(id_normal_br_target), // <-- 新增连接
+        .id_normal_br_target(id_normal_br_target), 
         
         .ex_pc(ex_pc), .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
         .ex_mem_en(ex_mem_en), .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_is_ld_b(ex_is_ld_b),
         .ex_is_ld_bu(ex_is_ld_bu), 
         .ex_alu_op(ex_alu_op), .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
         
-        // EX 侧打出
         .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
-        .ex_normal_br_target(ex_normal_br_target)  // <-- 新增连接
+        .ex_normal_br_target(ex_normal_br_target)  
     );
 
     // ==========================================
@@ -328,10 +325,9 @@ module cpu(
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
         
-        // 分支预测信息传递进核心比较器
         .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
-        .ex_normal_br_target(ex_normal_br_target), // <-- 新增连接
+        .ex_normal_br_target(ex_normal_br_target), 
         
         .ex_result(ex_result), .ex_mul_result(ex_mul_result), .ex_addr_align(ex_addr_align),
         .data_sram_en(internal_data_en),       
@@ -340,7 +336,6 @@ module cpu(
         .data_sram_wdata(internal_data_wdata), 
         .ex_mem_read(ex_mem_read),
         
-        // 核心输出：冲刷流水线与 BPU 更新
         .ex_br_taken(ex_br_taken), .ex_br_target(ex_br_target),
         .upd_bpu_en(upd_bpu_en), .upd_bpu_pc(upd_bpu_pc), .upd_bpu_ghr(upd_bpu_ghr),
         .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
@@ -403,6 +398,10 @@ module cpu(
     // Hazard Ctrl
     // ==========================================
     hazard_ctrl _hazard_ctrl (
+        .clk           (clk),           
+        .resetn        (resetn),        
+        .ex_valid_inst (ex_valid_inst), 
+        
         .id_rs1(id_rs1), .id_rs2(id_rs2),
         .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read), .ex_is_mul(ex_is_mul),
         .ex_br_taken(ex_br_taken), 
