@@ -15,8 +15,11 @@ module mem_wb_reg (
     output reg  [31:0] wb_data
 );
     always @(posedge clk) begin
-        if (~resetn || flush) begin
+        if (~resetn) begin
             wb_pc <= 32'd0; wb_rf_we <= 1'b0; wb_waddr <= 5'd0; wb_data <= 32'd0;
+        end else if (flush) begin
+            // 仅清除写使能
+            wb_rf_we <= 1'b0;
         end else if (!stall) begin
             wb_pc <= mem_pc;
             wb_rf_we <= mem_done ? mem_rf_we : 1'b0;

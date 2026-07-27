@@ -5,7 +5,7 @@ module branch_cmp (
     output wire        is_lt,
     output wire        is_ltu
 );
-    assign is_eq  = (val1 === val2);
+    assign is_eq  = (val1 == val2);
     
     // 有符号比较
     wire sign1 = val1[31];
