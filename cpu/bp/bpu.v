@@ -36,7 +36,8 @@ module bpu (
 );
     wire upd_cond_en = upd_en && (upd_br_type == 2'b00);
     wire upd_btb_inv_en = upd_en && (upd_br_type == 2'b01) && !upd_actually_taken;
-    wire upd_btb_we = upd_en && !upd_btb_inv_en;
+    wire upd_btb_we = upd_en && !upd_btb_inv_en && ((upd_br_type != 2'b00) || upd_actually_taken);
+    wire upd_loop_en = upd_cond_en && (upd_target < upd_pc);
     wire        btb_hit;
     wire [ 1:0] btb_type;
     wire [31:0] btb_target_out;
@@ -60,7 +61,7 @@ module bpu (
     loop_bpu _loop (
         .clk(clk), .resetn(resetn), .pc(pc[21:2]),
         .loop_valid_pred(loop_valid_pred), .loop_pred_taken(loop_pred_taken),
-        .upd_cond_en(upd_cond_en), .upd_pc(upd_pc[21:2]), .upd_actually_taken(upd_actually_taken),
+        .upd_loop_en(upd_loop_en), .upd_pc(upd_pc[21:2]), .upd_actually_taken(upd_actually_taken),
         .stat_loop_hits(stat_loop_hits), .stat_loop_confident(stat_loop_confident), .stat_loop_correct(stat_loop_correct), .stat_loop_wrong(stat_loop_wrong),
         .stat_override_taken(stat_loop_override_taken), .stat_override_wrong(stat_loop_override_wrong)
     );

@@ -8,7 +8,7 @@ module loop_bpu (
     output wire        loop_pred_taken,
 
     // --- 训练更新端口 ---
-    input  wire        upd_cond_en,
+    input  wire        upd_loop_en,
     input  wire [21:2] upd_pc,
     input  wire        upd_actually_taken,
 
@@ -58,7 +58,7 @@ module loop_bpu (
                 conf[i]   <= 2'b00;
                 stable[i] <= 2'b00;
             end
-        end else if (upd_cond_en) begin
+        end else if (upd_loop_en) begin
             if (valid[upd_idx] && (tag[upd_idx] == upd_tag)) begin
                 stat_loop_hits <= stat_loop_hits + 1;
                 if (loop_pred_on_update) begin
