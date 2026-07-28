@@ -9,7 +9,8 @@ module btb (
     output wire [31:0] btb_target,
     
     // --- 训练更新端口 ---
-    input  wire        upd_en,
+    input  wire        upd_we,
+    input  wire        upd_inv_en,
     input  wire [31:2] upd_pc,
     input  wire [ 1:0] upd_br_type,
     input  wire [31:0] upd_target
@@ -34,7 +35,12 @@ module btb (
         if (~resetn) begin
             for (i = 0; i < 64; i = i + 1) valid[i] <= 1'b0;
         end
-        else if (upd_en) begin
+        else if (upd_inv_en) begin
+            if (valid[upd_idx] && (tag[upd_idx] == upd_tag)) begin
+                valid[upd_idx] <= 1'b0;
+            end
+        end
+        else if (upd_we) begin
             valid[upd_idx]      <= 1'b1;
             tag[upd_idx]        <= upd_tag;
             target[upd_idx]     <= upd_target;

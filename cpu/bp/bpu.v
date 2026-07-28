@@ -35,13 +35,16 @@ module bpu (
     output wire [31:0] stat_loop_override_wrong
 );
     wire upd_cond_en = upd_en && (upd_br_type == 2'b00);
+    wire upd_btb_inv_en = upd_en && (upd_br_type == 2'b01) && !upd_actually_taken;
+    wire upd_btb_we = upd_en && !upd_btb_inv_en;
     wire        btb_hit;
     wire [ 1:0] btb_type;
     wire [31:0] btb_target_out;
     btb _btb (
         .clk(clk), .resetn(resetn), .pc(pc[31:2]),
         .btb_hit(btb_hit), .btb_type(btb_type), .btb_target(btb_target_out),
-        .upd_en(upd_en), .upd_pc(upd_pc[31:2]), .upd_br_type(upd_br_type), .upd_target(upd_target)
+        .upd_we(upd_btb_we), .upd_inv_en(upd_btb_inv_en),
+        .upd_pc(upd_pc[31:2]), .upd_br_type(upd_br_type), .upd_target(upd_target)
     );
 
     wire meta_taken;
