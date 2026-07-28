@@ -37,6 +37,17 @@ module write_buffer #(
 
     wire buf_full  = (count == DEPTH);
     wire buf_empty = (count == 3'd0);
+    // reg addr_hit;
+    // integer j;
+    // always @(*) begin
+    //     addr_hit = 1'b0;
+    //     for (j=0; j<DEPTH; j=j+1) begin
+    //         if (buf_valid[j] && (buf_addr[j][31:2] == cpu_addr[31:2])) begin
+    //             addr_hit = 1'b1;
+    //         end
+    //     end
+    // end
+    // wire has_conflict = addr_hit; 
     wire has_conflict = !buf_empty;
 
     wire load_req  = cpu_req && !cpu_wr;
