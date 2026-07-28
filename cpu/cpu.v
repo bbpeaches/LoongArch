@@ -32,51 +32,17 @@ module cpu(
     wire         internal_inst_en;
     wire [31:0] internal_inst_addr;
     wire         inst_sram_wait;
-    
-    reg inst_addr_rcv;
+    wire         fetch_issue_valid;
+    wire         fetch_pc_stall;
 
-    reg [2:0] inst_discard_cnt;
-    wire fetch_in_flight = inst_addr_rcv || (inst_sram_req && inst_sram_addr_ok);
-    wire current_fetch_abandoned = flush[1] && fetch_in_flight && !(inst_sram_data_ok && inst_discard_cnt == 0);
-    wire old_fetch_returned      = inst_sram_data_ok && (inst_discard_cnt > 0);
-
-    always @(posedge clk) begin
-        if (~resetn) begin
-            inst_discard_cnt <= 3'd0;
-        end else begin
-            inst_discard_cnt <= inst_discard_cnt 
-                            + (current_fetch_abandoned ? 3'd1 : 3'd0) 
-                            - (old_fetch_returned ? 3'd1 : 3'd0);
-        end
-    end
-
-    wire inst_data_ok_real = inst_sram_data_ok && (inst_discard_cnt == 0);
-
-    always @(posedge clk) begin
-        if (~resetn || flush[1]) begin
-            inst_addr_rcv <= 1'b0;
-        end else if ((inst_sram_req && inst_sram_addr_ok) && !inst_data_ok_real) begin
-            inst_addr_rcv <= 1'b1;
-        end else if (inst_data_ok_real) begin
-            inst_addr_rcv <= 1'b0;
-        end
-    end
-
-    reg          inst_buf_valid;
-    reg  [31:0] inst_buf_data;
-    reg  [31:0] inst_buf_pc;
-    reg          inst_buf_pred_taken;
-    reg  [31:0] inst_buf_pred_target;
-    reg  [7:0]  inst_buf_pred_ghr;
-
-    assign inst_sram_req   = internal_inst_en & ~inst_addr_rcv & ~inst_buf_valid;
+    assign inst_sram_req   = internal_inst_en & fetch_issue_valid;
     assign inst_sram_wr    = 1'b0;       
     assign inst_sram_size  = 2'b10;      
     assign inst_sram_wstrb = 4'b0000;
     assign inst_sram_addr  = internal_inst_addr;
     assign inst_sram_wdata = 32'd0;
 
-    assign inst_sram_wait  = internal_inst_en & ~inst_data_ok_real & ~inst_buf_valid;
+    assign inst_sram_wait  = fetch_pc_stall;
 
     wire         internal_data_en;
     wire [ 3:0] internal_data_wen;
@@ -169,7 +135,7 @@ module cpu(
     );
 
     stage_if _stage_if (
-        .clk(clk), .resetn(resetn), .stall_if(stall[0]),
+        .clk(clk), .resetn(resetn), .stall_if(fetch_pc_stall),
         .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), 
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
         .inst_sram_en(internal_inst_en),        
@@ -177,32 +143,124 @@ module cpu(
         .if_pc(if_pc), .if_req_fire(if_req_fire)
     );
 
+    reg         fetch_pending_valid;
+    reg [31:0]  fetch_pending_pc;
+    reg         fetch_pending_pred_taken;
+    reg [31:0]  fetch_pending_pred_target;
+    reg [ 7:0]  fetch_pending_pred_ghr;
+
+    reg [ 1:0]  fetch_fifo_count;
+    reg [31:0]  fetch_fifo_pc0, fetch_fifo_pc1;
+    reg [31:0]  fetch_fifo_inst0, fetch_fifo_inst1;
+    reg         fetch_fifo_pred_taken0, fetch_fifo_pred_taken1;
+    reg [31:0]  fetch_fifo_pred_target0, fetch_fifo_pred_target1;
+    reg [ 7:0]  fetch_fifo_pred_ghr0, fetch_fifo_pred_ghr1;
+
+    reg [ 2:0]  inst_discard_cnt;
+
+    wire fetch_fifo_pop = (fetch_fifo_count != 2'd0) && !stall[1] && !flush[1];
+    wire fetch_resp_real = inst_sram_data_ok && (inst_discard_cnt == 3'd0) && fetch_pending_valid;
+    wire fetch_resp_direct = fetch_resp_real && (fetch_fifo_count == 2'd0) && !stall[1] && !flush[1];
+    wire fetch_resp_to_fifo = fetch_resp_real && !fetch_resp_direct;
+    wire fetch_id_consume = fetch_fifo_pop || fetch_resp_direct;
+
+    wire current_fetch_abandoned = flush[1] && fetch_pending_valid && !inst_sram_data_ok;
+    wire old_fetch_returned = inst_sram_data_ok && (inst_discard_cnt != 3'd0);
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            inst_discard_cnt <= 3'd0;
+        end else begin
+            inst_discard_cnt <= inst_discard_cnt
+                            + (current_fetch_abandoned ? 3'd1 : 3'd0)
+                            - (old_fetch_returned ? 3'd1 : 3'd0);
+        end
+    end
+
+    wire [2:0] fetch_occupancy = {2'b00, fetch_pending_valid} + {1'b0, fetch_fifo_count};
+    wire [2:0] fetch_occupancy_after_consume = fetch_occupancy - (fetch_id_consume ? 3'd1 : 3'd0);
+
+    assign fetch_issue_valid = !flush[1] && (!fetch_pending_valid || inst_sram_data_ok) &&
+                               (fetch_occupancy_after_consume < 3'd2);
+
+    wire fetch_req_fire = inst_sram_req && inst_sram_addr_ok;
+    assign fetch_pc_stall = !fetch_req_fire;
+
     always @(posedge clk) begin
         if (~resetn || flush[1]) begin
-            inst_buf_valid <= 1'b0;
+            fetch_pending_valid <= 1'b0;
+            fetch_fifo_count    <= 2'd0;
         end else begin
-            if (inst_data_ok_real && stall[1]) begin
-                inst_buf_valid       <= 1'b1;
-                inst_buf_data        <= inst_sram_rdata;
-                inst_buf_pc          <= if_pc; 
-                inst_buf_pred_taken  <= if_pred_taken;
-                inst_buf_pred_target <= if_pred_target;
-                inst_buf_pred_ghr    <= if_pred_ghr;
-            end else if (!stall[1]) begin
-                inst_buf_valid <= 1'b0;
+            if (fetch_resp_to_fifo && !fetch_fifo_pop) begin
+                fetch_fifo_count <= fetch_fifo_count + 2'd1;
+            end else if (!fetch_resp_to_fifo && fetch_fifo_pop) begin
+                fetch_fifo_count <= fetch_fifo_count - 2'd1;
+            end
+
+            if (fetch_fifo_pop) begin
+                if (fetch_fifo_count == 2'd2) begin
+                    fetch_fifo_pc0          <= fetch_fifo_pc1;
+                    fetch_fifo_inst0        <= fetch_fifo_inst1;
+                    fetch_fifo_pred_taken0  <= fetch_fifo_pred_taken1;
+                    fetch_fifo_pred_target0 <= fetch_fifo_pred_target1;
+                    fetch_fifo_pred_ghr0    <= fetch_fifo_pred_ghr1;
+                end
+            end
+
+            if (fetch_resp_to_fifo) begin
+                if (fetch_fifo_pop) begin
+                    if (fetch_fifo_count == 2'd1) begin
+                        fetch_fifo_pc0          <= fetch_pending_pc;
+                        fetch_fifo_inst0        <= inst_sram_rdata;
+                        fetch_fifo_pred_taken0  <= fetch_pending_pred_taken;
+                        fetch_fifo_pred_target0 <= fetch_pending_pred_target;
+                        fetch_fifo_pred_ghr0    <= fetch_pending_pred_ghr;
+                    end else begin
+                        fetch_fifo_pc1          <= fetch_pending_pc;
+                        fetch_fifo_inst1        <= inst_sram_rdata;
+                        fetch_fifo_pred_taken1  <= fetch_pending_pred_taken;
+                        fetch_fifo_pred_target1 <= fetch_pending_pred_target;
+                        fetch_fifo_pred_ghr1    <= fetch_pending_pred_ghr;
+                    end
+                end else begin
+                    if (fetch_fifo_count == 2'd0) begin
+                        fetch_fifo_pc0          <= fetch_pending_pc;
+                        fetch_fifo_inst0        <= inst_sram_rdata;
+                        fetch_fifo_pred_taken0  <= fetch_pending_pred_taken;
+                        fetch_fifo_pred_target0 <= fetch_pending_pred_target;
+                        fetch_fifo_pred_ghr0    <= fetch_pending_pred_ghr;
+                    end else begin
+                        fetch_fifo_pc1          <= fetch_pending_pc;
+                        fetch_fifo_inst1        <= inst_sram_rdata;
+                        fetch_fifo_pred_taken1  <= fetch_pending_pred_taken;
+                        fetch_fifo_pred_target1 <= fetch_pending_pred_target;
+                        fetch_fifo_pred_ghr1    <= fetch_pending_pred_ghr;
+                    end
+                end
+            end
+
+            if (fetch_req_fire) begin
+                fetch_pending_valid      <= 1'b1;
+                fetch_pending_pc         <= if_pc;
+                fetch_pending_pred_taken <= if_pred_taken;
+                fetch_pending_pred_target<= if_pred_target;
+                fetch_pending_pred_ghr   <= if_pred_ghr;
+            end else if (inst_sram_data_ok) begin
+                fetch_pending_valid <= 1'b0;
             end
         end
     end
 
     wire [31:0] id_pc, id_inst;
     wire         id_valid;
-    
-    wire         if_id_valid_in       = inst_buf_valid ? 1'b1               : inst_data_ok_real;
-    wire [31:0] if_id_pc_in          = inst_buf_valid ? inst_buf_pc          : if_pc;
-    wire [31:0] if_id_inst_in        = inst_buf_valid ? inst_buf_data        : inst_sram_rdata;
-    wire         if_id_pred_taken_in  = inst_buf_valid ? inst_buf_pred_taken  : if_pred_taken;
-    wire [31:0] if_id_pred_target_in = inst_buf_valid ? inst_buf_pred_target : if_pred_target;
-    wire [7:0]  if_id_pred_ghr_in    = inst_buf_valid ? inst_buf_pred_ghr    : if_pred_ghr;
+
+    wire fetch_fifo_has_data = (fetch_fifo_count != 2'd0);
+    wire if_id_valid_in = fetch_fifo_has_data ? 1'b1 : fetch_resp_direct;
+    wire [31:0] if_id_pc_in = fetch_fifo_has_data ? fetch_fifo_pc0 : fetch_pending_pc;
+    wire [31:0] if_id_inst_in = fetch_fifo_has_data ? fetch_fifo_inst0 : inst_sram_rdata;
+    wire if_id_pred_taken_in = fetch_fifo_has_data ? fetch_fifo_pred_taken0 : fetch_pending_pred_taken;
+    wire [31:0] if_id_pred_target_in = fetch_fifo_has_data ? fetch_fifo_pred_target0 : fetch_pending_pred_target;
+    wire [7:0] if_id_pred_ghr_in = fetch_fifo_has_data ? fetch_fifo_pred_ghr0 : fetch_pending_pred_ghr;
 
     if_id_reg _if_id_reg (
         .clk(clk), .resetn(resetn), .stall(stall[1]), .flush(flush[1]), .if_valid(if_id_valid_in),

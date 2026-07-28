@@ -4,3 +4,4 @@ read.py
 readcbor.py
 *.cbor
 trace_readable.json
+.agents/
