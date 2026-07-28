@@ -260,6 +260,7 @@ module cpu(
     wire [31:0] ex_pred_target;
     wire [ 7:0] ex_pred_ghr;
     wire [31:0] ex_normal_br_target; 
+    wire [ 4:0] ex_rs2;
 
     id_ex_reg _id_ex_reg (
         .clk(clk), .resetn(resetn), .stall(stall[1]), .flush(flush[2]),
@@ -268,6 +269,8 @@ module cpu(
         .id_is_ld_bu(id_is_ld_bu),
         .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
         
+        .id_rs2(id_rs2),  
+
         .id_imm(id_imm), .id_br_info(id_br_info), .id_is_branch(id_is_branch),
         .id_pred_taken(id_pred_taken), .id_pred_target(id_pred_target), .id_pred_ghr(id_pred_ghr), .id_valid_inst(id_valid_inst),
         .id_normal_br_target(id_normal_br_target), 
@@ -277,6 +280,8 @@ module cpu(
         .ex_is_ld_bu(ex_is_ld_bu), 
         .ex_alu_op(ex_alu_op), .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
         
+        .ex_rs2(ex_rs2),  
+        
         .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target)  
@@ -285,6 +290,8 @@ module cpu(
     // ==========================================
     // EX 阶段
     // ==========================================
+    
+    wire mem_is_load = (mem_wb_sel == 2'b01);
     wire [ 1:0] ex_addr_align;
     wire         ex_mem_read;
     wire [31:0] ex_mul_result;
@@ -298,7 +305,10 @@ module cpu(
         .ex_pc(ex_pc), .ex_wb_sel(ex_wb_sel), .ex_mem_en(ex_mem_en),
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
-        
+        .ex_rs2(ex_rs2),                 
+        .mem_is_load(mem_is_load),       
+        .mem_waddr(mem_waddr),           
+        .mem_final_data(mem_final_data),
         .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target), 

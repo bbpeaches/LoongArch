@@ -8,6 +8,9 @@ module id_ex_reg (
     input  wire        id_mem_en, id_is_st_w, id_is_st_b, id_is_ld_b, id_is_ld_bu,
     input  wire [11:0] id_alu_op,
     input  wire [31:0] id_alu_src1, id_alu_src2, id_rdata2,
+    
+    input  wire [ 4:0] id_rs2,
+    
     input  wire [31:0] id_imm,
     input  wire [11:0] id_br_info,
     input  wire        id_is_branch, id_pred_taken,
@@ -23,6 +26,9 @@ module id_ex_reg (
     output reg         ex_mem_en, ex_is_st_w, ex_is_st_b, ex_is_ld_b, ex_is_ld_bu, 
     output reg  [11:0] ex_alu_op,
     output reg  [31:0] ex_alu_src1, ex_alu_src2, ex_rdata2,
+    
+    output reg  [ 4:0] ex_rs2, 
+    
     output reg  [31:0] ex_imm,
     output reg  [11:0] ex_br_info,
     output reg         ex_is_branch, ex_pred_taken,
@@ -56,12 +62,12 @@ module id_ex_reg (
     always @(posedge clk) begin
         if (~resetn) begin
             ex_pc <= 32'd0; ex_waddr <= 5'd0; ex_wb_sel <= 2'd0; ex_alu_op <= 12'd0;
-            ex_alu_src1 <= 32'd0; ex_alu_src2 <= 32'd0; ex_rdata2 <= 32'd0;
+            ex_alu_src1 <= 32'd0; ex_alu_src2 <= 32'd0; ex_rdata2 <= 32'd0; ex_rs2 <= 5'd0;
             ex_imm <= 32'd0; ex_br_info <= 12'd0; ex_pred_target <= 32'd0; 
             ex_pred_ghr <= 8'd0; ex_normal_br_target <= 32'd0;
         end else if (!stall) begin
             ex_pc <= id_pc; ex_waddr <= id_waddr; ex_wb_sel <= id_wb_sel; ex_alu_op <= id_alu_op;
-            ex_alu_src1 <= id_alu_src1; ex_alu_src2 <= id_alu_src2; ex_rdata2 <= id_rdata2;
+            ex_alu_src1 <= id_alu_src1; ex_alu_src2 <= id_alu_src2; ex_rdata2 <= id_rdata2; ex_rs2 <= id_rs2;
             ex_imm <= id_imm; ex_br_info <= id_br_info; ex_pred_target <= id_pred_target; 
             ex_pred_ghr <= id_pred_ghr; ex_normal_br_target <= id_normal_br_target; 
         end
