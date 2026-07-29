@@ -32,6 +32,10 @@ module icache (
     reg [ 6:0] req_index;
     reg [ 4:0] req_offset;
 
+    reg [19:0] refill_tag;
+    reg [ 6:0] refill_index;
+    reg [ 4:0] refill_offset;
+
     reg [127:0] lru_array;
     reg         replace_way; 
 
@@ -43,7 +47,18 @@ module icache (
     wire way1_hit = way1_r_v && (way1_r_tag == req_tag);
     wire cache_hit = way0_hit || way1_hit;
 
-    assign cache_addr_ok = (state == IDLE) || (state == LOOKUP && cache_hit && req_valid);
+    wire [2:0] current_bank = refill_offset[4:2] + refill_cnt;
+    wire bypass_match = (state == REFILL) && req_valid &&
+                        (req_tag == refill_tag) &&
+                        (req_index == refill_index) &&
+                        (req_offset[4:2] == current_bank);
+
+    assign cache_addr_ok = (state == IDLE) || 
+                           (state == LOOKUP && cache_hit && req_valid) ||
+                           (state == REFILL && (!req_valid || cache_data_ok));
+
+    wire next_req_valid = (cache_addr_ok && cpu_req) ? 1'b1 :
+                          (cache_data_ok) ? 1'b0 : req_valid;
 
     always @(posedge clk) begin
         if (~resetn) begin
@@ -63,12 +78,20 @@ module icache (
         end
     end
 
+    always @(posedge clk) begin
+        if (state == LOOKUP && req_valid && !cache_hit) begin
+            refill_tag    <= req_tag;
+            refill_index  <= req_index;
+            refill_offset <= req_offset;
+        end
+    end
+
     wire [31:0] way0_word = way0_r_data[ req_offset[4:2] * 32 +: 32 ];
     wire [31:0] way1_word = way1_r_data[ req_offset[4:2] * 32 +: 32 ];
 
-    assign cache_rdata = (state == REFILL) ? rdata :
-                         (way0_hit)        ? way0_word :
-                         (way1_hit)        ? way1_word : 32'd0;
+    assign cache_rdata = (bypass_match) ? rdata :
+                         (way0_hit)     ? way0_word :
+                         (way1_hit)     ? way1_word : 32'd0;
 
     always @(posedge clk) begin
         if (~resetn) begin
@@ -97,7 +120,7 @@ module icache (
 
     assign arid    = 4'd0;
     assign arvalid = arvalid_reg;
-    assign araddr  = {req_tag, req_index, req_offset[4:2], 2'b00};
+    assign araddr  = {refill_tag, refill_index, refill_offset[4:2], 2'b00};
 
     assign rready  = (state == REFILL);
 
@@ -113,11 +136,9 @@ module icache (
     end
 
     assign cache_data_ok = (state == LOOKUP && req_valid && cache_hit) ||
-                           (state == REFILL && rvalid && rready && (refill_cnt == 3'd0));
+                           (bypass_match && rvalid && rready);
 
-    wire [2:0] current_bank = req_offset[4:2] + refill_cnt;
     wire [7:0] w_bank_en    = (state == REFILL && rvalid && rready) ? (8'b1 << current_bank) : 8'd0;
-    
     wire w_tag_v_en = (state == REFILL && rvalid && rready && rlast);
 
     // Way 0
@@ -130,8 +151,8 @@ module icache (
         .r_v_out     (way0_r_v),
         .r_data_out  (way0_r_data),
         .w_tag_v_en  (w_tag_v_en && (replace_way == 1'b0)),
-        .w_index     (req_index),
-        .w_tag       (req_tag),
+        .w_index     (refill_index), 
+        .w_tag       (refill_tag), 
         .w_v         (1'b1),
         .w_bank_en   ((replace_way == 1'b0) ? w_bank_en : 8'd0),
         .w_bank_data (rdata)
@@ -147,8 +168,8 @@ module icache (
         .r_v_out     (way1_r_v),
         .r_data_out  (way1_r_data),
         .w_tag_v_en  (w_tag_v_en && (replace_way == 1'b1)),
-        .w_index     (req_index),
-        .w_tag       (req_tag),
+        .w_index     (refill_index), 
+        .w_tag       (refill_tag),  
         .w_v         (1'b1),
         .w_bank_en   ((replace_way == 1'b1) ? w_bank_en : 8'd0),
         .w_bank_data (rdata)
@@ -188,8 +209,12 @@ module icache (
                     next_state = REFILL;
             end
             REFILL: begin
-                if (rvalid && rready && rlast)
-                    next_state = IDLE;
+                if (rvalid && rready && rlast) begin
+                    if (next_req_valid)
+                        next_state = LOOKUP;
+                    else
+                        next_state = IDLE;
+                end
             end
             default: next_state = IDLE;
         endcase
