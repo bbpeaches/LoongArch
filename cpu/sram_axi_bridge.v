@@ -64,12 +64,14 @@ module sram_axi_bridge(
 );
 
     wire data_r_data_ok = rvalid && rready && (rid == 4'd1);
-    reg data_ar_acc;
     
+    wire data_r_data_last = rvalid && rready && (rid == 4'd1) && rlast; 
+    
+    reg data_ar_acc;
     always @(posedge clk) begin
         if(!resetn) data_ar_acc <= 0;
-        else if(data_addr_ok && data_req && !data_wr && !data_r_data_ok) data_ar_acc <= 1;
-        else if(data_r_data_ok) data_ar_acc <= 0;
+        else if(data_addr_ok && data_req && !data_wr && !data_r_data_last) data_ar_acc <= 1;
+        else if(data_r_data_last) data_ar_acc <= 0;
     end
 
     wire do_data_ar = data_req && !data_wr && !data_ar_acc;
@@ -94,11 +96,15 @@ module sram_axi_bridge(
         end
     end
 
+    wire do_data_burst = (data_size == 2'b11); 
+
     assign arvalid = holding_ar ? 1'b1 : (do_data_ar || icache_arvalid);
     assign arid    = holding_ar ? held_arid  : (do_data_ar ? 4'd1 : 4'd0);
     assign araddr  = holding_ar ? held_araddr : (do_data_ar ? data_addr : icache_araddr);
-    assign arsize  = holding_ar ? held_arsize : (do_data_ar ? {1'b0, data_size} : 3'd2);
-    assign arlen   = holding_ar ? held_arlen   : (do_data_ar ? 8'd0 : 8'd7);
+    
+    assign arsize  = holding_ar ? held_arsize : (do_data_ar ? (do_data_burst ? 3'd2 : {1'b0, data_size}) : 3'd2);
+    assign arlen   = holding_ar ? held_arlen  : (do_data_ar ? (do_data_burst ? 8'd3 : 8'd0) : 8'd7);
+    
     assign arburst = holding_ar ? held_arburst : (do_data_ar ? 2'b01 : 2'b10);
     
     assign arlock  = 2'd0;
