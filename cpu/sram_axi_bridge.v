@@ -1,5 +1,3 @@
-`timescale 1ns / 1ps
-
 module sram_axi_bridge(
     input  wire        clk,
     input  wire        resetn,

@@ -404,6 +404,7 @@ module cpu(
             data_rdata_buf <= data_sram_rdata;
         end
     end
+    wire [31:0] actual_data_rdata = data_sram_data_ok ? data_sram_rdata : data_rdata_buf;
     
     // ==========================================
     // MEM 阶段
@@ -414,7 +415,7 @@ module cpu(
         .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b),
         .mem_is_ld_bu(mem_is_ld_bu),
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_mul_result(mem_mul_result), .mem_valid(mem_valid),
-        .data_sram_rdata(data_rdata_buf),
+        .data_sram_rdata(actual_data_rdata),
         .data_sram_resp_valid(1'b1),
         .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait()
     );
