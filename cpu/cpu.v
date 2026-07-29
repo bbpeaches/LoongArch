@@ -312,7 +312,6 @@ module cpu(
     wire         ex_fw_valid;
     wire [11:0] ex_alu_op;  
     
-    wire [31:0] ex_imm;
     wire [11:0] ex_br_info;
     wire        ex_is_branch, ex_pred_taken, ex_valid_inst;
     wire [31:0] ex_pred_target;
@@ -329,7 +328,7 @@ module cpu(
         
         .id_rs2(id_rs2),  
 
-        .id_imm(id_imm), .id_br_info(id_br_info), .id_is_branch(id_is_branch),
+        .id_br_info(id_br_info), .id_is_branch(id_is_branch),
         .id_pred_taken(id_pred_taken), .id_pred_target(id_pred_target), .id_pred_ghr(id_pred_ghr), .id_valid_inst(id_valid_inst),
         .id_normal_br_target(id_normal_br_target), 
         
@@ -340,7 +339,7 @@ module cpu(
         
         .ex_rs2(ex_rs2),  
         
-        .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
+        .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target)  
     );
@@ -367,7 +366,7 @@ module cpu(
         .mem_is_load(mem_is_load),       
         .mem_waddr(mem_waddr),           
         .mem_final_data(mem_final_data),
-        .ex_imm(ex_imm), .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
+        .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target), 
         

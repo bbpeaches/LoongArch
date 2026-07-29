@@ -18,7 +18,6 @@ module stage_ex (
     input  wire [ 4:0] mem_waddr,
     input  wire [31:0] mem_final_data,
 
-    input  wire [31:0] ex_imm,
     input  wire [11:0] ex_br_info,
     input  wire        ex_is_branch,
     input  wire        ex_pred_taken,
@@ -90,7 +89,7 @@ module stage_ex (
         .is_ltu(ex_rj_lt_rd_unsigned)
     );
 
-    wire [31:0] jirl_br_target   = ex_alu_src1 + ex_imm;
+    wire [31:0] jirl_br_target   = ex_mem_addr;
     wire [31:0] actual_target    = is_jirl ? jirl_br_target : ex_normal_br_target; 
 
     wire jirl_target_wrong   = (jirl_br_target != ex_pred_target);
