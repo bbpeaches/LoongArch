@@ -61,6 +61,13 @@ module stage_ex (
         .result(ex_mul_result)
     );
 
+    wire [31:0] ex_mem_addr;
+    agu _agu (
+        .base  (ex_alu_src1),
+        .offset(ex_alu_src2),
+        .addr  (ex_mem_addr)
+    );
+
     wire inst_b = ex_br_info[11];
     wire inst_beq = ex_br_info[10];
     wire inst_bne = ex_br_info[9];
@@ -115,7 +122,8 @@ module stage_ex (
     assign upd_bpu_target      = actual_target;
 
     assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;
-    assign ex_addr_align = ex_alu_result[1:0];
+    
+    assign ex_addr_align = ex_mem_addr[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;
 
     wire forward_store_data = mem_is_load && (mem_waddr == ex_rs2) && (mem_waddr != 5'd0);
@@ -124,7 +132,8 @@ module stage_ex (
     assign data_sram_en    = ex_mem_en;
     assign data_sram_wen   = ex_is_st_w ? 4'b1111 :
                              ex_is_st_b ? ex_st_b_we : 4'b0000;
-    assign data_sram_addr  = ex_alu_result;
+    
+    assign data_sram_addr  = ex_mem_addr;
     assign data_sram_wdata = ex_is_st_b ? {4{actual_store_data[7:0]}} : actual_store_data;
 
     assign ex_mem_read = ex_mem_en && !(ex_is_st_w | ex_is_st_b);

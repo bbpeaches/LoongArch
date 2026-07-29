@@ -8,9 +8,8 @@ module valid_regfile (
     input  wire [6:0] w_addr,
     input  wire       w_v
 );
-
     reg [127:0] valid_array;
-    reg [6:0]   r_addr_reg;
+    reg         r_v_reg;
 
     always @(posedge clk) begin
         if (~resetn) begin
@@ -21,11 +20,12 @@ module valid_regfile (
     end
 
     always @(posedge clk) begin
-        if (r_en) begin
-            r_addr_reg <= r_addr;
+        if (~resetn) begin
+            r_v_reg <= 1'b0;
+        end else if (r_en) begin
+            r_v_reg <= valid_array[r_addr];
         end
     end
-
-    assign r_v = valid_array[r_addr_reg];
+    assign r_v = r_v_reg;
 
 endmodule

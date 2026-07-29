@@ -124,7 +124,7 @@ module icache (
     icache_way way0 (
         .clk         (clk),
         .resetn      (resetn),
-        .r_en        (cache_addr_ok && cpu_req),
+        .r_en        (cache_addr_ok),
         .r_index     (cpu_addr[11:5]),
         .r_tag_out   (way0_r_tag),
         .r_v_out     (way0_r_v),
@@ -141,7 +141,7 @@ module icache (
     icache_way way1 (
         .clk         (clk),
         .resetn      (resetn),
-        .r_en        (cache_addr_ok && cpu_req),
+        .r_en        (cache_addr_ok),
         .r_index     (cpu_addr[11:5]),
         .r_tag_out   (way1_r_tag),
         .r_v_out     (way1_r_v),
