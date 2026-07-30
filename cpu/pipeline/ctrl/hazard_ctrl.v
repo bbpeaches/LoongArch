@@ -35,6 +35,7 @@ module hazard_ctrl (
 
     wire ex_dep_hit = id_valid && (dep_rs1_raw || dep_rs2_raw);
 
+    // Store rs2-only load-use: allow combo MEM→EX store forward (board soft path).
     wire is_store = (id_inst[31:22] == 10'b0010_1001_10) | (id_inst[31:22] == 10'b0010_1001_00);
     wire store_data_dep = is_store && !dep_rs1_raw && dep_rs2_raw;
     wire normal_load_use = ex_mem_read && ex_dep_hit && !store_data_dep;

@@ -12,7 +12,6 @@ module stage_ex (
     input  wire [31:0] ex_alu_src1,
     input  wire [31:0] ex_alu_src2,
     input  wire [31:0] ex_rdata2,
-    
     input  wire [ 4:0] ex_rs2,
     input  wire        mem_is_load,
     input  wire [ 4:0] mem_waddr,

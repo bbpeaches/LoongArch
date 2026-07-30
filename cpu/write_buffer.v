@@ -22,8 +22,12 @@ module write_buffer #(
     output wire [31:0] mem_wdata,
     input  wire        mem_addr_ok,
     input  wire        mem_data_ok,
-    input  wire [31:0] mem_rdata
+    input  wire [31:0] mem_rdata,
+
+    output wire        wb_empty
 );
+    // Board-proven soft path: any pending store blocks all loads.
+    // (CAM conflict was an optimization; WaitBoot regressions force restore.)
 
     reg [31:0] buf_addr  [0:DEPTH-1];
     reg [31:0] buf_wdata [0:DEPTH-1];
@@ -37,17 +41,8 @@ module write_buffer #(
 
     wire buf_full  = (count == DEPTH);
     wire buf_empty = (count == 3'd0);
-    // reg addr_hit;
-    // integer j;
-    // always @(*) begin
-    //     addr_hit = 1'b0;
-    //     for (j=0; j<DEPTH; j=j+1) begin
-    //         if (buf_valid[j] && (buf_addr[j][31:2] == cpu_addr[31:2])) begin
-    //             addr_hit = 1'b1;
-    //         end
-    //     end
-    // end
-    // wire has_conflict = addr_hit; 
+    assign wb_empty = buf_empty;
+
     wire has_conflict = !buf_empty;
 
     wire load_req  = cpu_req && !cpu_wr;
@@ -67,13 +62,12 @@ module write_buffer #(
             state <= S_IDLE;
         end else case (state)
             S_IDLE: begin
-                if (load_ready_to_go) begin 
+                if (load_ready_to_go) begin
                     if (mem_req && mem_addr_ok && mem_data_ok)
                         state <= S_IDLE;
                     else
                         state <= S_DO_LOAD;
-                end 
-                else if (store_ready_to_go) begin
+                end else if (store_ready_to_go) begin
                     if (mem_req && mem_addr_ok && mem_data_ok)
                         state <= S_IDLE;
                     else
@@ -138,7 +132,7 @@ module write_buffer #(
             head  <= 2'd0;
             tail  <= 2'd0;
             count <= 3'd0;
-            for (i=0; i<DEPTH; i=i+1) buf_valid[i] <= 1'b0;
+            for (i = 0; i < DEPTH; i = i + 1) buf_valid[i] <= 1'b0;
         end else begin
             if (store_push) begin
                 buf_valid[tail] <= 1'b1;

@@ -60,7 +60,11 @@ module sram_axi_bridge(
     input  wire [ 3:0] bid,
     input  wire [ 1:0] bresp,
     input  wire        bvalid,
-    output wire        bready
+    output wire        bready,
+
+    // Soft-idle helpers: no in-flight data or I$ AXI
+    output wire        data_idle,
+    output wire        icache_idle
 );
 
     wire data_r_data_ok = rvalid && rready && (rid == 4'd1);
@@ -183,5 +187,20 @@ module sram_axi_bridge(
 
     assign data_data_ok = (rvalid && (rid == 4'd1)) || (bvalid && (bid == 4'd1));
     assign data_rdata   = rdata;
+
+    assign data_idle = !data_ar_acc && !aw_sent && !w_sent &&
+                       !holding_aw && !holding_w && !data_req_w;
+
+    // Track outstanding I$ miss so soft_idle waits before Base seize (COPY).
+    reg icache_busy;
+    always @(posedge clk) begin
+        if (!resetn)
+            icache_busy <= 1'b0;
+        else if (icache_arvalid && icache_arready)
+            icache_busy <= 1'b1;
+        else if (icache_rvalid && icache_rready && icache_rlast)
+            icache_busy <= 1'b0;
+    end
+    assign icache_idle = !icache_busy && !icache_arvalid;
 
 endmodule

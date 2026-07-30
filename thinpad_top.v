@@ -53,7 +53,7 @@ pll_example clock_gen (
   .locked(locked)
 );
 
-// 分别为两个时钟域生成同步复位信号
+
 reg cpu_reset_sync;
 always @(posedge clk_cpu or negedge locked) begin
     if (~locked) cpu_reset_sync <= 1'b0;
@@ -76,9 +76,22 @@ wire arvalid_cpu, arready_cpu, rlast_cpu, rvalid_cpu, rready_cpu;
 wire awvalid_cpu, awready_cpu, wlast_cpu, wvalid_cpu, wready_cpu;
 wire bvalid_cpu, bready_cpu;
 
+wire        pipe_hold, pipe_retarget_en;
+wire [31:0] pipe_retarget_pc;
+wire [31:0] if_pc_sniff;
+wire        if_pc_sniff_ok;
+wire        soft_idle;
+
 mycpu_top u_cpu (
     .aclk       (clk_cpu),
     .aresetn    (cpu_resetn),
+
+    .pipe_hold        (pipe_hold),
+    .pipe_retarget_en (pipe_retarget_en),
+    .pipe_retarget_pc (pipe_retarget_pc),
+    .if_pc_sniff      (if_pc_sniff),
+    .if_pc_sniff_ok   (if_pc_sniff_ok),
+    .soft_idle        (soft_idle),
     
     .arid       (arid_cpu),
     .araddr     (araddr_cpu),
@@ -133,9 +146,8 @@ wire awvalid_sram, awready_sram, wlast_sram, wvalid_sram, wready_sram;
 wire bvalid_sram, bready_sram;
 
 axi_cdc_wrapper #(
-    .USE_CDC(1) // 
+    .USE_CDC(1) 
 ) u_axi_cdc_wrapper (
-    // Slave 侧 (接 CPU)
     .s_axi_aclk    (clk_cpu),
     .s_axi_aresetn (cpu_resetn),
     .s_axi_arid    (arid_cpu),
@@ -174,7 +186,7 @@ axi_cdc_wrapper #(
     .s_axi_bvalid  (bvalid_cpu),
     .s_axi_bready  (bready_cpu),
 
-    // Master 侧 (接 SRAM/UART 外设状态机)
+    // Master �? (�? SRAM/UART 外设状�?�机)
     .m_axi_aclk    (clk_sram),
     .m_axi_aresetn (sram_resetn),
     .m_axi_arid    (arid_sram),
@@ -360,25 +372,135 @@ wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
 wire        mem_we   = do_write;
 wire        mem_re   = rvalid_reg; 
 
-wire is_base = (mem_addr[31:22] == 10'h070); 
-wire is_ext  = (mem_addr[31:22] == 10'h071); 
-wire is_uart = (mem_addr[31:20] == 12'h1f0); 
+wire is_base = (mem_addr[31:22] == 10'h070);
+wire is_ext  = (mem_addr[31:22] == 10'h071);
+wire is_uart = (mem_addr[31:20] == 12'h1f0);
 
-// BaseRAM
-assign base_ram_ce_n = ~(is_base && (mem_re || mem_we));
-assign base_ram_we_n = ~(is_base && mem_we);
-assign base_ram_oe_n = ~(is_base && mem_re && !mem_we);
-assign base_ram_be_n =  (is_base && mem_we) ? ~current_wstrb : 4'b0000;
-assign base_ram_addr =  mem_addr[21:2];
-assign base_ram_data =  (is_base && mem_we) ? current_wdata : 32'bz;
 
-// ExtRAM
-assign ext_ram_ce_n  = ~(is_ext && (mem_re || mem_we));
-assign ext_ram_we_n  = ~(is_ext && mem_we);
-assign ext_ram_oe_n  = ~(is_ext && mem_re && !mem_we);
-assign ext_ram_be_n  =  (is_ext && mem_we) ? ~current_wstrb : 4'b0000;
-assign ext_ram_addr  =  mem_addr[21:2];
-assign ext_ram_data  =  (is_ext && mem_we) ? current_wdata : 32'bz;
+wire        soft_base_ce_n = ~(is_base && (mem_re || mem_we));
+wire        soft_base_we_n = ~(is_base && mem_we);
+wire        soft_base_oe_n = ~(is_base && mem_re && !mem_we);
+wire [3:0]  soft_base_be_n = (is_base && mem_we) ? ~current_wstrb : 4'b0000;
+wire [19:0] soft_base_addr = mem_addr[21:2];
+wire [31:0] soft_base_dout = current_wdata;
+wire        soft_base_doe  = (is_base && mem_we);
+
+wire        soft_ext_ce_n = ~(is_ext && (mem_re || mem_we));
+wire        soft_ext_we_n = ~(is_ext && mem_we);
+wire        soft_ext_oe_n = ~(is_ext && mem_re && !mem_we);
+wire [3:0]  soft_ext_be_n = (is_ext && mem_we) ? ~current_wstrb : 4'b0000;
+wire [19:0] soft_ext_addr = mem_addr[21:2];
+wire [31:0] soft_ext_dout = current_wdata;
+wire        soft_ext_doe  = (is_ext && mem_we);
+
+
+wire [1:0]  rload_idx;
+wire        rload_go;
+wire        soft_fallback;
+wire        pipe_busy_c;
+wire        soft_fallback_set;
+wire        pipe_go_s;
+wire [1:0]  pipe_idx_s;
+wire        pipe_busy_s, pipe_done_s, pipe_giveup_s;
+wire [31:0] pipe_retarget_pc_s;
+wire        pipe_port_sel;
+
+wire        pipe_base_ce_n, pipe_base_oe_n, pipe_base_we_n, pipe_base_doe;
+wire [3:0]  pipe_base_be_n;
+wire [19:0] pipe_base_addr;
+wire [31:0] pipe_base_dout;
+wire        pipe_ext_ce_n, pipe_ext_oe_n, pipe_ext_we_n, pipe_ext_doe;
+wire [3:0]  pipe_ext_be_n;
+wire [19:0] pipe_ext_addr;
+wire [31:0] pipe_ext_dout;
+
+wire        mux_base_ce_n, mux_base_oe_n, mux_base_we_n, mux_base_doe;
+wire [3:0]  mux_base_be_n;
+wire [19:0] mux_base_addr;
+wire [31:0] mux_base_dout;
+wire        mux_ext_ce_n, mux_ext_oe_n, mux_ext_we_n, mux_ext_doe;
+wire [3:0]  mux_ext_be_n;
+wire [19:0] mux_ext_addr;
+wire [31:0] mux_ext_dout;
+
+la_recipe_loader #(
+    .ENABLE_MASK(4'b1111) 
+) u_rload (
+    .clk(clk_cpu), .resetn(cpu_resetn),
+    .if_addr(if_pc_sniff), .if_addr_ok(if_pc_sniff_ok),
+    .pipe_busy(pipe_busy_c),
+    .soft_fallback_set(soft_fallback_set),
+    .rload_idx(rload_idx), .rload_go(rload_go),
+    .soft_fallback(soft_fallback)
+);
+
+la_pipe_cdc u_pipe_cdc (
+    .clk_cpu(clk_cpu), .resetn_cpu(cpu_resetn),
+    .clk_sram(clk_sram), .resetn_sram(sram_resetn),
+    .rload_go(rload_go && !soft_fallback), .rload_idx(rload_idx),
+    .soft_idle(soft_idle),
+    .pipe_go(pipe_go_s), .pipe_idx(pipe_idx_s),
+    .pipe_busy_s(pipe_busy_s), .pipe_done_s(pipe_done_s),
+    .pipe_retarget_pc_s(pipe_retarget_pc_s), .pipe_giveup_s(pipe_giveup_s),
+    .pipe_hold(pipe_hold), .pipe_retarget_en(pipe_retarget_en),
+    .pipe_retarget_pc(pipe_retarget_pc), .pipe_busy_c(pipe_busy_c),
+    .soft_fallback_set(soft_fallback_set)
+);
+
+la_mem_pipe u_mem_pipe (
+    .clk(clk_sram), .resetn(sram_resetn),
+    .pipe_go(pipe_go_s), .pipe_idx(pipe_idx_s),
+    .pipe_busy(pipe_busy_s), .pipe_done(pipe_done_s), .pipe_giveup(pipe_giveup_s),
+    .pipe_retarget_pc(pipe_retarget_pc_s), .pipe_port_sel(pipe_port_sel),
+    .pipe_base_ce_n(pipe_base_ce_n), .pipe_base_oe_n(pipe_base_oe_n),
+    .pipe_base_we_n(pipe_base_we_n), .pipe_base_be_n(pipe_base_be_n),
+    .pipe_base_addr(pipe_base_addr), .pipe_base_dout(pipe_base_dout),
+    .pipe_base_doe(pipe_base_doe), .base_data_in(base_ram_data),
+    .pipe_ext_ce_n(pipe_ext_ce_n), .pipe_ext_oe_n(pipe_ext_oe_n),
+    .pipe_ext_we_n(pipe_ext_we_n), .pipe_ext_be_n(pipe_ext_be_n),
+    .pipe_ext_addr(pipe_ext_addr), .pipe_ext_dout(pipe_ext_dout),
+    .pipe_ext_doe(pipe_ext_doe), .ext_data_in(ext_ram_data)
+);
+
+la_bank_mux u_bank_mux (
+    .pipe_port_sel(pipe_port_sel),
+    .soft_base_ce_n(soft_base_ce_n), .soft_base_oe_n(soft_base_oe_n),
+    .soft_base_we_n(soft_base_we_n), .soft_base_be_n(soft_base_be_n),
+    .soft_base_addr(soft_base_addr), .soft_base_dout(soft_base_dout),
+    .soft_base_doe(soft_base_doe),
+    .soft_ext_ce_n(soft_ext_ce_n), .soft_ext_oe_n(soft_ext_oe_n),
+    .soft_ext_we_n(soft_ext_we_n), .soft_ext_be_n(soft_ext_be_n),
+    .soft_ext_addr(soft_ext_addr), .soft_ext_dout(soft_ext_dout),
+    .soft_ext_doe(soft_ext_doe),
+    .pipe_base_ce_n(pipe_base_ce_n), .pipe_base_oe_n(pipe_base_oe_n),
+    .pipe_base_we_n(pipe_base_we_n), .pipe_base_be_n(pipe_base_be_n),
+    .pipe_base_addr(pipe_base_addr), .pipe_base_dout(pipe_base_dout),
+    .pipe_base_doe(pipe_base_doe),
+    .pipe_ext_ce_n(pipe_ext_ce_n), .pipe_ext_oe_n(pipe_ext_oe_n),
+    .pipe_ext_we_n(pipe_ext_we_n), .pipe_ext_be_n(pipe_ext_be_n),
+    .pipe_ext_addr(pipe_ext_addr), .pipe_ext_dout(pipe_ext_dout),
+    .pipe_ext_doe(pipe_ext_doe),
+    .base_ce_n(mux_base_ce_n), .base_oe_n(mux_base_oe_n), .base_we_n(mux_base_we_n),
+    .base_be_n(mux_base_be_n), .base_addr(mux_base_addr),
+    .base_data_out(mux_base_dout), .base_data_oe(mux_base_doe),
+    .ext_ce_n(mux_ext_ce_n), .ext_oe_n(mux_ext_oe_n), .ext_we_n(mux_ext_we_n),
+    .ext_be_n(mux_ext_be_n), .ext_addr(mux_ext_addr),
+    .ext_data_out(mux_ext_dout), .ext_data_oe(mux_ext_doe)
+);
+
+assign base_ram_ce_n = mux_base_ce_n;
+assign base_ram_we_n = mux_base_we_n;
+assign base_ram_oe_n = mux_base_oe_n;
+assign base_ram_be_n = mux_base_be_n;
+assign base_ram_addr = mux_base_addr;
+assign base_ram_data = mux_base_doe ? mux_base_dout : 32'bz;
+
+assign ext_ram_ce_n  = mux_ext_ce_n;
+assign ext_ram_we_n  = mux_ext_we_n;
+assign ext_ram_oe_n  = mux_ext_oe_n;
+assign ext_ram_be_n  = mux_ext_be_n;
+assign ext_ram_addr  = mux_ext_addr;
+assign ext_ram_data  = mux_ext_doe ? mux_ext_dout : 32'bz;
 
 reg uart_dlab;
 

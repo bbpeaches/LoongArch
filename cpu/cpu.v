@@ -1,5 +1,9 @@
 module cpu(
     input         clk, resetn,
+
+    input          pipe_hold,
+    input          pipe_retarget_en,
+    input  [31:0]  pipe_retarget_pc,
     
     output         inst_sram_req,
     output         inst_sram_wr,
@@ -74,7 +78,7 @@ module cpu(
     assign data_sram_addr  = internal_data_addr;
     assign data_sram_wdata = internal_data_wdata;
 
-    assign mem_wait = internal_data_en & ~data_sram_data_ok;
+    assign mem_wait = pipe_hold | (internal_data_en & ~data_sram_data_ok);
 
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
@@ -138,6 +142,9 @@ module cpu(
         .clk(clk), .resetn(resetn), .stall_if(fetch_pc_stall),
         .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), 
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
+        .pipe_hold(pipe_hold),
+        .pipe_retarget_en(pipe_retarget_en),
+        .pipe_retarget_pc(pipe_retarget_pc),
         .inst_sram_en(internal_inst_en),        
         .inst_sram_addr(internal_inst_addr),   
         .if_pc(if_pc), .if_req_fire(if_req_fire)
@@ -348,12 +355,16 @@ module cpu(
     // EX 阶段
     // ==========================================
     
-    wire mem_is_load = (mem_wb_sel == 2'b01);
+    wire [31:0] mem_pc, mem_result, mem_mul_result;
+    wire [ 1:0] mem_wb_sel, mem_addr_align;
+    wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
     wire [ 1:0] ex_addr_align;
     wire         ex_mem_read;
     wire [31:0] ex_mul_result;
     wire         ex_is_mul = (ex_wb_sel == 2'b10);
     assign ex_fw_valid = !ex_is_mul && !ex_mem_read;
+
+    wire mem_is_load = (mem_wb_sel == 2'b01);
 
     stage_ex _stage_ex (
         .clk(clk),
@@ -362,9 +373,9 @@ module cpu(
         .ex_pc(ex_pc), .ex_wb_sel(ex_wb_sel), .ex_mem_en(ex_mem_en),
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
-        .ex_rs2(ex_rs2),                 
-        .mem_is_load(mem_is_load),       
-        .mem_waddr(mem_waddr),           
+        .ex_rs2(ex_rs2),
+        .mem_is_load(mem_is_load),
+        .mem_waddr(mem_waddr),
         .mem_final_data(mem_final_data),
         .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
@@ -381,10 +392,6 @@ module cpu(
         .upd_bpu_en(upd_bpu_en), .upd_bpu_pc(upd_bpu_pc), .upd_bpu_ghr(upd_bpu_ghr),
         .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
     );
-
-    wire [31:0] mem_pc, mem_result, mem_mul_result;
-    wire [ 1:0] mem_wb_sel, mem_addr_align;
-    wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
 
     assign mem_mul_result = ex_mul_result;
 
