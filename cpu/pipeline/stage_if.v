@@ -16,8 +16,8 @@ module stage_if (
 );
     wire [31:0] seq_pc = if_pc + 32'd4;
 
-    wire [31:0] next_pc = id_pred_wrong    ? id_correct_pc    :
-                          if_pred_taken    ? if_pred_target   : seq_pc;
+    wire [31:0] next_pc = id_pred_wrong    ? id_correct_pc :
+                          if_pred_taken    ? if_pred_target : seq_pc;
 
     wire flush_pc = id_pred_wrong;
     wire stall_pc = stall_if & ~flush_pc;

@@ -38,6 +38,7 @@ module stage_ex (
     output wire [31:0] upd_bpu_pc,
     output wire [ 7:0] upd_bpu_ghr,
     output wire [ 1:0] upd_bpu_br_type_out,
+    output wire        upd_bpu_pred_taken,
     output wire        upd_bpu_taken,
     output wire [31:0] upd_bpu_target
 );
@@ -105,6 +106,7 @@ module stage_ex (
                                  is_ret  ? 2'b11 :
                                  inst_cond_branch ? 2'b00 : 2'b01;
     assign upd_bpu_taken       = actual_taken;
+    assign upd_bpu_pred_taken  = ex_pred_taken;
     assign upd_bpu_target      = actual_target;
 
     assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;

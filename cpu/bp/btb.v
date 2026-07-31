@@ -15,6 +15,7 @@ module btb (
     input  wire [ 1:0] upd_br_type,
     input  wire [31:0] upd_target
 );
+    // 64-entry direct-mapped BTB, indexed by PC[7:2].
     reg        valid      [0:63];
     reg  [ 1:0] entry_type [0:63];
     reg  [23:0] tag        [0:63];

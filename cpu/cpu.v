@@ -86,7 +86,7 @@ module cpu(
     wire [31:0] if_pred_target, id_pred_target;
     wire [7:0]  if_pred_ghr, id_pred_ghr;
     
-    wire         upd_bpu_en, upd_bpu_taken;
+    wire         upd_bpu_en, upd_bpu_taken, upd_bpu_pred_taken;
     wire [ 1:0] upd_bpu_br_type;
     wire [7:0]  upd_bpu_ghr;
     wire [31:0] upd_bpu_pc, upd_bpu_target;
@@ -102,6 +102,7 @@ module cpu(
     reg [ 7:0] upd_bpu_ghr_r;
     reg [ 1:0] upd_bpu_br_type_r;
     reg        upd_bpu_taken_r;
+    reg        upd_bpu_pred_taken_r;
     reg [31:0] upd_bpu_target_r;
 
     always @(posedge clk) begin
@@ -111,6 +112,7 @@ module cpu(
             upd_bpu_ghr_r     <= 8'd0;
             upd_bpu_br_type_r <= 2'd0;
             upd_bpu_taken_r   <= 1'b0;
+            upd_bpu_pred_taken_r <= 1'b0;
             upd_bpu_target_r  <= 32'd0;
         end else begin
             upd_bpu_en_r      <= upd_bpu_en;
@@ -118,6 +120,7 @@ module cpu(
             upd_bpu_ghr_r     <= upd_bpu_ghr;
             upd_bpu_br_type_r <= upd_bpu_br_type;
             upd_bpu_taken_r   <= upd_bpu_taken;
+            upd_bpu_pred_taken_r <= upd_bpu_pred_taken;
             upd_bpu_target_r  <= upd_bpu_target;
         end
     end
@@ -130,9 +133,10 @@ module cpu(
 
     bpu _bpu (
         .clk(clk), .resetn(resetn),
-        .pc(if_pc), .pred_taken(if_pred_taken), .pred_target(if_pred_target), .pred_ghr(if_pred_ghr),
+        .pc(if_pc),
+        .pred_taken(if_pred_taken), .pred_target(if_pred_target), .pred_ghr(if_pred_ghr),
         .upd_en(upd_bpu_en_r), .upd_pc(upd_bpu_pc_r), .upd_ghr(upd_bpu_ghr_r),
-        .upd_br_type(upd_bpu_br_type_r),
+        .upd_br_type(upd_bpu_br_type_r), .upd_pred_taken(upd_bpu_pred_taken_r),
         .upd_actually_taken(upd_bpu_taken_r), .upd_target(upd_bpu_target_r),
         .stat_btb_hits(stat_btb_hits), .stat_cond_preds(stat_cond_preds), .stat_pred_correct(stat_pred_correct), .stat_pred_wrong(stat_pred_wrong),
         .stat_loop_overrides(stat_loop_overrides), .stat_ret_preds(stat_ret_preds), .stat_ret_correct(stat_ret_correct), .stat_ret_wrong(stat_ret_wrong), .stat_ras_fallbacks(stat_ras_fallbacks), .stat_ras_valid_preds(stat_ras_valid_preds),
@@ -409,7 +413,8 @@ module cpu(
         
         .ex_br_taken(ex_br_taken), .ex_br_target(ex_br_target),
         .upd_bpu_en(upd_bpu_en), .upd_bpu_pc(upd_bpu_pc), .upd_bpu_ghr(upd_bpu_ghr),
-        .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
+        .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_pred_taken(upd_bpu_pred_taken),
+        .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
     );
 
     // The multiplier has no ready signal.  Preserve its in-order responses
