@@ -70,3 +70,21 @@
 
 - Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_232215.bit`
 - SHA-256: `945EAF7E6E98D3C6D1E8960DB73331AEEEE8E5565AF2F19C435F2938AE654630`
+
+## 2026-07-31 23:29:53 CST — segmented write-buffer word comparison
+
+- Changed `cpu/write_buffer.v`: expressed the exact 30-bit word-address
+  equality as ten independent 3-bit equalities followed by reduction.  Each
+  slice fits a LUT6, removing the monolithic comparator carry chain while
+  retaining the original conflict predicate bit-for-bit.
+- Default implementation flow only; no strategy, directive, register, clock,
+  request timing, or multiply timing change.
+
+| Metric | Prior accepted revision | This revision | Delta |
+| --- | ---: | ---: | ---: |
+| Setup WNS | -0.960 ns | -0.800 ns | +0.160 ns |
+| Setup TNS | -386.958 ns | -185.965 ns | +200.993 ns |
+| Hold WHS | +0.056 ns | +0.079 ns | +0.023 ns |
+
+- Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_232953.bit`
+- SHA-256: `FC91D87B8DF9B23C6901890F5491DC3C8C53A241E13C3B859765753936BB6154`

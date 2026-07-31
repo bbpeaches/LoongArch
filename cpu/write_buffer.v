@@ -53,8 +53,22 @@ module write_buffer #(
     function same_word_addr;
         input [31:0] addr_a;
         input [31:0] addr_b;
+        reg [9:0] word_addr_match;
         begin
-            same_word_addr = (addr_a[31:2] == addr_b[31:2]);
+            // A three-bit slice equality fits one LUT6.  Reducing the ten
+            // independent slices avoids a single 30-bit comparator carry
+            // chain while preserving the exact word-address comparison.
+            word_addr_match[0] = (addr_a[ 4: 2] == addr_b[ 4: 2]);
+            word_addr_match[1] = (addr_a[ 7: 5] == addr_b[ 7: 5]);
+            word_addr_match[2] = (addr_a[10: 8] == addr_b[10: 8]);
+            word_addr_match[3] = (addr_a[13:11] == addr_b[13:11]);
+            word_addr_match[4] = (addr_a[16:14] == addr_b[16:14]);
+            word_addr_match[5] = (addr_a[19:17] == addr_b[19:17]);
+            word_addr_match[6] = (addr_a[22:20] == addr_b[22:20]);
+            word_addr_match[7] = (addr_a[25:23] == addr_b[25:23]);
+            word_addr_match[8] = (addr_a[28:26] == addr_b[28:26]);
+            word_addr_match[9] = (addr_a[31:29] == addr_b[31:29]);
+            same_word_addr = &word_addr_match;
         end
     endfunction
 
