@@ -1,23 +1,23 @@
 module icache (
-    input         clk   ,   // 时钟
-    input         resetn,   // 低有效复位信号
+    input  wire        clk   ,   // 时钟
+    input  wire        resetn,   // 低有效复位信号
 
-    input         cpu_req      ,    // 由 CPU 发送至 Cache 
-    input  [31:0] cpu_addr     ,    // 由 CPU 发送至 Cache 
-    output [31:0] cache_rdata  ,    // 由 Cache 返回给 CPU 
-    output        cache_addr_ok,    // 由 Cache 返回给 CPU 
-    output        cache_data_ok,    // 由 Cache 返回给 CPU 
+    input  wire        cpu_req      ,    // 由 CPU 发送至 Cache
+    input  wire [31:0] cpu_addr     ,    // 由 CPU 发送至 Cache
+    output wire [31:0] cache_rdata  ,    // 由 Cache 返回给 CPU
+    output wire        cache_addr_ok,    // 由 Cache 返回给 CPU
+    output wire        cache_data_ok,    // 由 Cache 返回给 CPU
 
-    output [3 :0] arid   ,  // Cache 向主存发起读请求时使用的 AXI 信道的 id 号
-    output [31:0] araddr ,  // Cache 向主存发起读请求时所使用的地址
-    output        arvalid,  // Cache 向主存发起读请求的请求信号
-    input         arready,  // 读请求能否被接收的握手信号
+    output wire [3 :0] arid   ,  // Cache 向主存发起读请求时使用的 AXI 信道的 id 号
+    output wire [31:0] araddr ,  // Cache 向主存发起读请求时所使用的地址
+    output wire        arvalid,  // Cache 向主存发起读请求的请求信号
+    input  wire        arready,  // 读请求能否被接收的握手信号
     
-    input  [3 :0] rid    ,  // 主存向 Cache 返回数据时使用的 AXI 信道的 id 号
-    input  [31:0] rdata  ,  // 主存向 Cache 返回的数据
-    input         rlast  ,  // 是否是主存向 Cache 返回的最后一个数据
-    input         rvalid ,  // 主存向 Cache 返回数据时的数据有效信号
-    output        rready    // 标识当前的 Cache 已经准备好可以接收主存返回的数据
+    input  wire [3 :0] rid    ,  // 主存向 Cache 返回数据时使用的 AXI 信道的 id 号
+    input  wire [31:0] rdata  ,  // 主存向 Cache 返回的数据
+    input  wire        rlast  ,  // 是否是主存向 Cache 返回的最后一个数据
+    input  wire        rvalid ,  // 主存向 Cache 返回数据时的数据有效信号
+    output wire        rready    // 标识当前的 Cache 已经准备好可以接收主存返回的数据
 );
 
     localparam IDLE   = 2'd0;
@@ -26,6 +26,7 @@ module icache (
     localparam REFILL = 2'd3;
 
     reg [1:0] state, next_state;
+    reg [2:0] refill_cnt;
 
     reg        req_valid;
     reg [19:0] req_tag;
@@ -124,7 +125,6 @@ module icache (
 
     assign rready  = (state == REFILL);
 
-    reg [2:0] refill_cnt;
     always @(posedge clk) begin
         if (~resetn) begin
             refill_cnt <= 3'd0;

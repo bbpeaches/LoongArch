@@ -385,6 +385,7 @@ assign flash_ce_n   = 1'b1;
 assign flash_oe_n   = 1'b1;
 assign flash_we_n   = 1'b1;
 assign flash_byte_n = 1'b1;
+assign flash_a      = 23'd0;
 
 assign video_red   = 3'b0;
 assign video_green = 3'b0;

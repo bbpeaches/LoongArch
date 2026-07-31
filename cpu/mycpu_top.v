@@ -1,4 +1,3 @@
-
 module mycpu_top(
     input  wire        aclk,
     input  wire        aresetn,
@@ -135,7 +134,8 @@ module mycpu_top(
         .mem_wdata      (wb_data_wdata),
         .mem_addr_ok    (wb_data_addr_ok),
         .mem_data_ok    (wb_data_data_ok),
-        .mem_rdata      (wb_data_rdata)
+        .mem_rdata      (wb_data_rdata),
+        .wb_empty       ()
     );
 
     icache u_icache (

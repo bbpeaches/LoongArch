@@ -1,30 +1,31 @@
 module cpu(
-    input         clk, resetn,
+    input  wire        clk,
+    input  wire        resetn,
     
-    output         inst_sram_req,
-    output         inst_sram_wr,
-    output [ 1:0]  inst_sram_size,
-    output [31:0]  inst_sram_addr,
-    output [ 3:0]  inst_sram_wstrb,
-    output [31:0]  inst_sram_wdata,
-    input          inst_sram_addr_ok,
-    input          inst_sram_data_ok,
-    input  [31:0]  inst_sram_rdata,
+    output wire        inst_sram_req,
+    output wire        inst_sram_wr,
+    output wire [ 1:0] inst_sram_size,
+    output wire [31:0] inst_sram_addr,
+    output wire [ 3:0] inst_sram_wstrb,
+    output wire [31:0] inst_sram_wdata,
+    input  wire        inst_sram_addr_ok,
+    input  wire        inst_sram_data_ok,
+    input  wire [31:0] inst_sram_rdata,
     
-    output         data_sram_req,
-    output         data_sram_wr,
-    output [ 1:0]  data_sram_size,
-    output [31:0]  data_sram_addr,
-    output [ 3:0]  data_sram_wstrb,
-    output [31:0]  data_sram_wdata,
-    input          data_sram_addr_ok,
-    input          data_sram_data_ok,
-    input  [31:0]  data_sram_rdata,
+    output wire        data_sram_req,
+    output wire        data_sram_wr,
+    output wire [ 1:0] data_sram_size,
+    output wire [31:0] data_sram_addr,
+    output wire [ 3:0] data_sram_wstrb,
+    output wire [31:0] data_sram_wdata,
+    input  wire        data_sram_addr_ok,
+    input  wire        data_sram_data_ok,
+    input  wire [31:0] data_sram_rdata,
     
-    output [31:0]  debug_wb_pc,
-    output         debug_wb_rf_wen,
-    output [ 4:0]  debug_wb_rf_wnum,
-    output [31:0]  debug_wb_rf_wdata
+    output wire [31:0] debug_wb_pc,
+    output wire        debug_wb_rf_wen,
+    output wire [ 4:0] debug_wb_rf_wnum,
+    output wire [31:0] debug_wb_rf_wdata
 );
     wire [4:0] stall;
     wire [4:0] flush;
@@ -49,6 +50,8 @@ module cpu(
     wire [31:0] internal_data_addr;
     wire [31:0] internal_data_wdata;
     wire         mem_wait;
+    wire         ex_is_st_w;
+    wire         ex_is_st_b;
 
     reg data_addr_rcv;
     always @(posedge clk) begin
@@ -286,6 +289,7 @@ module cpu(
     wire [11:0] id_br_info;
     wire        id_valid_inst;
     wire [31:0] id_normal_br_target;
+    wire        ex_fw_valid;
 
     stage_id _stage_id (
         .clk(clk), .resetn(resetn), .ex_fw_valid(ex_fw_valid),
@@ -308,8 +312,7 @@ module cpu(
 
     wire [31:0] ex_pc, ex_alu_src1, ex_alu_src2, ex_rdata2;
     wire [ 1:0] ex_wb_sel;
-    wire         ex_mem_en, ex_is_st_w, ex_is_st_b, ex_is_ld_b, ex_is_ld_bu;
-    wire         ex_fw_valid;
+    wire         ex_mem_en, ex_is_ld_b, ex_is_ld_bu;
     wire [11:0] ex_alu_op;  
     
     wire [11:0] ex_br_info;
