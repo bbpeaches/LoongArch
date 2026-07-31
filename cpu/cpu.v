@@ -290,7 +290,7 @@ module cpu(
     wire [ 1:0] id_wb_sel;
     wire [ 4:0] id_waddr, id_rs1, id_rs2;
     wire [11:0] id_alu_op; 
-    wire [31:0] id_alu_src1, id_alu_src2, id_rdata2;
+    wire [31:0] id_alu_src1, id_alu_src2, id_mul_src1, id_mul_src2, id_rdata2;
     
     wire [31:0] id_imm;
     wire [11:0] id_br_info;
@@ -305,8 +305,8 @@ module cpu(
     // an additional zero-injection mux.
     wire mul_issue = resetn && id_valid_inst && (id_wb_sel == 2'b10) &&
                      !stall[1] && !flush[2];
-    wire [31:0] mul_operand_a = id_alu_src1;
-    wire [31:0] mul_operand_b = id_alu_src2;
+    wire [31:0] mul_operand_a = id_mul_src1;
+    wire [31:0] mul_operand_b = id_mul_src2;
     wire [31:0] mul_result;
     wire        mul_result_valid;
 
@@ -333,7 +333,8 @@ module cpu(
         .id_rf_we(id_rf_we), .id_waddr(id_waddr), .id_wb_sel(id_wb_sel),
         .id_mem_en(id_mem_en), .id_is_st_w(id_is_st_w), .id_is_st_b(id_is_st_b), .id_is_ld_b(id_is_ld_b),
         .id_is_ld_bu(id_is_ld_bu),
-        .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
+        .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2),
+        .id_mul_src1(id_mul_src1), .id_mul_src2(id_mul_src2), .id_rdata2(id_rdata2),
         .id_rs1(id_rs1), .id_rs2(id_rs2),
         
         .id_imm(id_imm), .id_br_info(id_br_info), .id_is_branch(id_is_branch), .id_valid_inst(id_valid_inst),

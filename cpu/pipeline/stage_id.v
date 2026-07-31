@@ -29,6 +29,8 @@ module stage_id (
     output wire [11:0] id_alu_op,
     output wire [31:0] id_alu_src1,
     output wire [31:0] id_alu_src2,
+    output wire [31:0] id_mul_src1,
+    output wire [31:0] id_mul_src2,
     output wire [31:0] id_rdata2,
     output wire [ 4:0] id_rs1,
     output wire [ 4:0] id_rs2,
@@ -109,6 +111,11 @@ module stage_id (
 
     assign id_alu_src1 = id_valid_inst ? (is_pcaddu12i ? id_pc : id_fwd_rdata1) : 32'd0;
     assign id_alu_src2 = id_valid_inst ? (id_use_imm ? id_imm : id_fwd_rdata2) : 32'd0;
+    // The implemented multiply instruction is register-register.  Its result
+    // valid pipe qualifies these operands, so they can bypass the unrelated
+    // ALU source muxes.
+    assign id_mul_src1 = id_fwd_rdata1;
+    assign id_mul_src2 = id_fwd_rdata2;
     assign id_rdata2   = id_valid_inst ? id_fwd_rdata2 : 32'd0;
     
     assign id_normal_br_target = id_pc + id_imm;
