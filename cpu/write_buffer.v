@@ -101,15 +101,12 @@ module write_buffer #(
         end else case (state)
             S_IDLE: begin
                 if (load_ready_to_go) begin
-                    if (mem_req && mem_addr_ok && mem_data_ok)
-                        state <= S_IDLE;
-                    else
-                        state <= S_DO_LOAD;
+                    // The integrated SRAM slave has at least one response
+                    // wait cycle, so a newly issued request cannot complete
+                    // in this S_IDLE cycle.
+                    state <= S_DO_LOAD;
                 end else if (store_ready_to_go) begin
-                    if (mem_req && mem_addr_ok && mem_data_ok)
-                        state <= S_IDLE;
-                    else
-                        state <= S_DO_STORE;
+                    state <= S_DO_STORE;
                 end
             end
             S_DO_LOAD: begin

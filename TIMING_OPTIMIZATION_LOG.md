@@ -88,3 +88,21 @@
 
 - Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_232953.bit`
 - SHA-256: `FC91D87B8DF9B23C6901890F5491DC3C8C53A241E13C3B859765753936BB6154`
+
+## 2026-08-01 00:03:27 CST — remove unreachable zero-cycle SRAM completion
+
+- Changed `cpu/write_buffer.v`: `S_IDLE` now always enters its registered
+  load/store transaction state after selecting a request.  The integrated
+  SRAM slave fixes both `READ_WAIT_CYCLES` and `WRITE_WAIT_CYCLES` to one, so
+  the removed same-cycle completion branch is unreachable.  Request launch,
+  response timing, and every pipeline register are unchanged.
+- Default implementation flow only; no strategy, directive, or clock change.
+
+| Metric | Prior accepted revision | This revision | Delta |
+| --- | ---: | ---: | ---: |
+| Setup WNS | -0.800 ns | -0.468 ns | +0.332 ns |
+| Setup TNS | -185.965 ns | -66.182 ns | +119.783 ns |
+| Hold WHS | +0.079 ns | +0.068 ns | -0.011 ns (still met) |
+
+- Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260801_000327.bit`
+- SHA-256: `CFACC30898DCF3DBF34880921179E9FB2E6A9B5F2BB645D97C4A102B606BAB5A`
