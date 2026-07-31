@@ -300,12 +300,13 @@ module cpu(
 
     // mult_gen_0 has a two-stage pipeline.  Feed it when the multiply is
     // admitted into ID/EX, one cycle before the instruction reaches EX.  CE
-    // stays asserted to move earlier products through the IP pipeline; zeroes
-    // are injected for non-multiply slots and their results are ignored.
+    // stays asserted to move earlier products through the IP pipeline.  The
+    // valid pipe discards non-multiply results, so the DSP inputs do not need
+    // an additional zero-injection mux.
     wire mul_issue = resetn && id_valid_inst && (id_wb_sel == 2'b10) &&
                      !stall[1] && !flush[2];
-    wire [31:0] mul_operand_a = mul_issue ? id_alu_src1 : 32'd0;
-    wire [31:0] mul_operand_b = mul_issue ? id_alu_src2 : 32'd0;
+    wire [31:0] mul_operand_a = id_alu_src1;
+    wire [31:0] mul_operand_b = id_alu_src2;
     wire [31:0] mul_result;
     wire        mul_result_valid;
 
