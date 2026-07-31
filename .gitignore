@@ -7,4 +7,6 @@ trace_readable.json
 .agents/
 .vivado_check/
 .Xil/
-.codex_vivado_check.tcl
+*.tcl
+*.log
+*.jou
