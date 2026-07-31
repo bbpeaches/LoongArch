@@ -76,7 +76,6 @@ module mycpu_top(
     wire        wb_data_addr_ok;
     wire        wb_data_data_ok;
     wire [31:0] wb_data_rdata;
-    wire        wb_empty;
 
     wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
     wire [31:0] icache_araddr, icache_rdata;
@@ -114,9 +113,7 @@ module mycpu_top(
         .debug_wb_rf_wdata  (debug_wb_rf_wdata)
     );
 
-    write_buffer #(
-        .DEPTH(4)
-    ) u_wb (
+    write_buffer u_wb (
         .clk            (aclk),
         .resetn         (aresetn),
 
@@ -138,8 +135,7 @@ module mycpu_top(
         .mem_wdata      (wb_data_wdata),
         .mem_addr_ok    (wb_data_addr_ok),
         .mem_data_ok    (wb_data_data_ok),
-        .mem_rdata      (wb_data_rdata),
-        .wb_empty       (wb_empty)
+        .mem_rdata      (wb_data_rdata)
     );
 
     icache u_icache (
