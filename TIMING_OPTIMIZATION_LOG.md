@@ -51,3 +51,22 @@
 
 - Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_231542.bit`
 - SHA-256: `6CBC3D9B9CDEDFD00728A38E4ABC6E3D917A59A88CAFE93376198C91F874395B`
+
+## 2026-07-31 23:22:15 CST — unconditional idle-load capture
+
+- Changed `cpu/write_buffer.v`: the already-existing load address and size
+  latches capture any load request in `S_IDLE`.  They are read only after a
+  request enters `S_DO_LOAD`, so storing the current request before the CAM
+  conflict/AXI-ready decision is behaviorally equivalent and removes that
+  decision from the latch CE path.
+- Default implementation flow only; no strategy, directive, register, or
+  clock change.
+
+| Metric | Prior accepted revision | This revision | Delta |
+| --- | ---: | ---: | ---: |
+| Setup WNS | -1.432 ns | -0.960 ns | +0.472 ns |
+| Setup TNS | -494.038 ns | -386.958 ns | +107.080 ns |
+| Hold WHS | +0.036 ns | +0.056 ns | +0.020 ns |
+
+- Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_232215.bit`
+- SHA-256: `945EAF7E6E98D3C6D1E8960DB73331AEEEE8E5565AF2F19C435F2938AE654630`

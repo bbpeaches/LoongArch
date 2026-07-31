@@ -111,7 +111,10 @@ module write_buffer #(
     reg [31:0] load_addr_latch;
     reg [ 1:0] load_size_latch;
     always @(posedge clk) begin
-        if (state == S_IDLE && load_ready_to_go && !(mem_req && mem_addr_ok)) begin
+        // These values are only consumed after S_DO_LOAD is entered.  Capture
+        // every idle-cycle load request so the address-CAM and AXI-ready
+        // decision do not sit on the latch enable path.
+        if (state == S_IDLE && load_req) begin
             load_addr_latch <= cpu_addr;
             load_size_latch <= cpu_size;
         end
