@@ -1,8 +1,6 @@
-// Mux soft AXI-SRAM pad drivers vs mem-pipe drivers.
+
 module la_bank_mux (
     input  wire        pipe_port_sel,
-
-    // Soft path (existing thinpad slave)
     input  wire        soft_base_ce_n,
     input  wire        soft_base_oe_n,
     input  wire        soft_base_we_n,
@@ -10,7 +8,6 @@ module la_bank_mux (
     input  wire [19:0] soft_base_addr,
     input  wire [31:0] soft_base_dout,
     input  wire        soft_base_doe,
-
     input  wire        soft_ext_ce_n,
     input  wire        soft_ext_oe_n,
     input  wire        soft_ext_we_n,
@@ -18,8 +15,6 @@ module la_bank_mux (
     input  wire [19:0] soft_ext_addr,
     input  wire [31:0] soft_ext_dout,
     input  wire        soft_ext_doe,
-
-    // Pipe path
     input  wire        pipe_base_ce_n,
     input  wire        pipe_base_oe_n,
     input  wire        pipe_base_we_n,
@@ -27,7 +22,6 @@ module la_bank_mux (
     input  wire [19:0] pipe_base_addr,
     input  wire [31:0] pipe_base_dout,
     input  wire        pipe_base_doe,
-
     input  wire        pipe_ext_ce_n,
     input  wire        pipe_ext_oe_n,
     input  wire        pipe_ext_we_n,
@@ -35,8 +29,6 @@ module la_bank_mux (
     input  wire [19:0] pipe_ext_addr,
     input  wire [31:0] pipe_ext_dout,
     input  wire        pipe_ext_doe,
-
-    // Pads
     output wire        base_ce_n,
     output wire        base_oe_n,
     output wire        base_we_n,
@@ -44,7 +36,6 @@ module la_bank_mux (
     output wire [19:0] base_addr,
     output wire [31:0] base_data_out,
     output wire        base_data_oe,
-
     output wire        ext_ce_n,
     output wire        ext_oe_n,
     output wire        ext_we_n,
@@ -60,7 +51,6 @@ module la_bank_mux (
     assign base_addr    = pipe_port_sel ? pipe_base_addr    : soft_base_addr;
     assign base_data_out= pipe_port_sel ? pipe_base_dout    : soft_base_dout;
     assign base_data_oe = pipe_port_sel ? pipe_base_doe     : soft_base_doe;
-
     assign ext_ce_n     = pipe_port_sel ? pipe_ext_ce_n     : soft_ext_ce_n;
     assign ext_oe_n     = pipe_port_sel ? pipe_ext_oe_n     : soft_ext_oe_n;
     assign ext_we_n     = pipe_port_sel ? pipe_ext_we_n     : soft_ext_we_n;

@@ -1,58 +1,57 @@
 module thinpad_top(
-    input wire clk_50M,           // 50MHz
-    input wire clk_11M0592,       
-    input wire clock_btn,         
-    input wire reset_btn,         
-    input  wire[3:0]  touch_btn,  
-    input  wire[31:0] dip_sw,     
-    output wire[15:0] leds,       
-    output wire[7:0]  dpy0,       
-    output wire[7:0]  dpy1,       
+    input wire clk_50M,
+    input wire clk_11M0592,
+    input wire clock_btn,
+    input wire reset_btn,
+    input  wire[3:0]  touch_btn,
+    input  wire[31:0] dip_sw,
+    output wire[15:0] leds,
+    output wire[7:0]  dpy0,
+    output wire[7:0]  dpy1,
 
-    inout wire[31:0] base_ram_data,  
-    output wire[19:0] base_ram_addr, 
-    output wire[3:0] base_ram_be_n,  
-    output wire base_ram_ce_n,       
-    output wire base_ram_oe_n,       
-    output wire base_ram_we_n,       
+    inout wire[31:0] base_ram_data,
+    output wire[19:0] base_ram_addr,
+    output wire[3:0] base_ram_be_n,
+    output wire base_ram_ce_n,
+    output wire base_ram_oe_n,
+    output wire base_ram_we_n,
 
-    inout wire[31:0] ext_ram_data,  
-    output wire[19:0] ext_ram_addr, 
-    output wire[3:0] ext_ram_be_n,  
-    output wire ext_ram_ce_n,       
-    output wire ext_ram_oe_n,       
-    output wire ext_ram_we_n,       
+    inout wire[31:0] ext_ram_data,
+    output wire[19:0] ext_ram_addr,
+    output wire[3:0] ext_ram_be_n,
+    output wire ext_ram_ce_n,
+    output wire ext_ram_oe_n,
+    output wire ext_ram_we_n,
 
-    output wire txd,  
-    input  wire rxd,  
+    output wire txd,
+    input  wire rxd,
 
-    output wire [22:0]flash_a,      
-    inout  wire [15:0]flash_d,      
-    output wire flash_rp_n,         
-    output wire flash_vpen,         
-    output wire flash_ce_n,         
-    output wire flash_oe_n,         
-    output wire flash_we_n,         
-    output wire flash_byte_n,       
+    output wire [22:0]flash_a,
+    inout  wire [15:0]flash_d,
+    output wire flash_rp_n,
+    output wire flash_vpen,
+    output wire flash_ce_n,
+    output wire flash_oe_n,
+    output wire flash_we_n,
+    output wire flash_byte_n,
 
-    output wire[2:0] video_red,    
-    output wire[2:0] video_green,  
-    output wire[1:0] video_blue,   
-    output wire video_hsync,       
-    output wire video_vsync,       
-    output wire video_clk,         
-    output wire video_de           
+    output wire[2:0] video_red,
+    output wire[2:0] video_green,
+    output wire[1:0] video_blue,
+    output wire video_hsync,
+    output wire video_vsync,
+    output wire video_clk,
+    output wire video_de
 );
 
 wire locked, clk_cpu, clk_sram;
 pll_example clock_gen (
   .clk_in1(clk_50M),
-  .clk_out1(clk_cpu),   
-  .clk_out2(clk_sram),  
+  .clk_out1(clk_cpu),
+  .clk_out2(clk_sram),
   .reset(reset_btn),
   .locked(locked)
 );
-
 
 reg cpu_reset_sync;
 always @(posedge clk_cpu or negedge locked) begin
@@ -76,23 +75,34 @@ wire arvalid_cpu, arready_cpu, rlast_cpu, rvalid_cpu, rready_cpu;
 wire awvalid_cpu, awready_cpu, wlast_cpu, wvalid_cpu, wready_cpu;
 wire bvalid_cpu, bready_cpu;
 
-wire        pipe_hold, pipe_retarget_en;
-wire [31:0] pipe_retarget_pc;
-wire [31:0] if_pc_sniff;
-wire        if_pc_sniff_ok;
-wire        soft_idle;
+wire        pipe_go;
+wire [1:0]  pipe_idx;
+wire        pipe_busy_s, pipe_done_s, pipe_giveup_s;
+wire [31:0] pipe_retarget_pc_s;
+wire        pipe_port_sel;
+wire        pipe_base_ce_n, pipe_base_oe_n, pipe_base_we_n, pipe_base_doe;
+wire [3:0]  pipe_base_be_n;
+wire [19:0] pipe_base_addr;
+wire [31:0] pipe_base_dout;
+wire        pipe_ext_ce_n, pipe_ext_oe_n, pipe_ext_we_n, pipe_ext_doe;
+wire [3:0]  pipe_ext_be_n;
+wire [19:0] pipe_ext_addr;
+wire [31:0] pipe_ext_dout;
 
 mycpu_top u_cpu (
     .aclk       (clk_cpu),
     .aresetn    (cpu_resetn),
 
-    .pipe_hold        (pipe_hold),
-    .pipe_retarget_en (pipe_retarget_en),
-    .pipe_retarget_pc (pipe_retarget_pc),
-    .if_pc_sniff      (if_pc_sniff),
-    .if_pc_sniff_ok   (if_pc_sniff_ok),
-    .soft_idle        (soft_idle),
-    
+    .clk_sram   (clk_sram),
+    .resetn_sram(sram_resetn),
+
+    .pipe_go            (pipe_go),
+    .pipe_idx           (pipe_idx),
+    .pipe_busy_s        (pipe_busy_s),
+    .pipe_done_s        (pipe_done_s),
+    .pipe_giveup_s      (pipe_giveup_s),
+    .pipe_retarget_pc_s (pipe_retarget_pc_s),
+
     .arid       (arid_cpu),
     .araddr     (araddr_cpu),
     .arlen      (arlen_cpu),
@@ -103,14 +113,14 @@ mycpu_top u_cpu (
     .arprot     (arprot_cpu),
     .arvalid    (arvalid_cpu),
     .arready    (arready_cpu),
-    
+
     .rid        (rid_cpu),
     .rdata      (rdata_cpu),
     .rresp      (rresp_cpu),
     .rlast      (rlast_cpu),
     .rvalid     (rvalid_cpu),
     .rready     (rready_cpu),
-    
+
     .awid       (awid_cpu),
     .awaddr     (awaddr_cpu),
     .awlen      (awlen_cpu),
@@ -121,19 +131,19 @@ mycpu_top u_cpu (
     .awprot     (awprot_cpu),
     .awvalid    (awvalid_cpu),
     .awready    (awready_cpu),
-    
+
     .wid        (wid_cpu),
     .wdata      (wdata_cpu),
     .wstrb      (wstrb_cpu),
     .wlast      (wlast_cpu),
     .wvalid     (wvalid_cpu),
     .wready     (wready_cpu),
-    
+
     .bid        (bid_cpu),
     .bresp      (bresp_cpu),
     .bvalid     (bvalid_cpu),
     .bready     (bready_cpu),
-    
+
     .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
 );
 
@@ -146,7 +156,7 @@ wire awvalid_sram, awready_sram, wlast_sram, wvalid_sram, wready_sram;
 wire bvalid_sram, bready_sram;
 
 axi_cdc_wrapper #(
-    .USE_CDC(1) 
+    .USE_CDC(1)
 ) u_axi_cdc_wrapper (
     .s_axi_aclk    (clk_cpu),
     .s_axi_aresetn (cpu_resetn),
@@ -173,7 +183,7 @@ axi_cdc_wrapper #(
     .s_axi_awburst (awburst_cpu),
     .s_axi_awlock  (awlock_cpu),
     .s_axi_awcache (awcache_cpu),
-    .s_axi_awprot  (awprot_cpu),  
+    .s_axi_awprot  (awprot_cpu),
     .s_axi_awvalid (awvalid_cpu),
     .s_axi_awready (awready_cpu),
     .s_axi_wdata   (wdata_cpu),
@@ -186,7 +196,6 @@ axi_cdc_wrapper #(
     .s_axi_bvalid  (bvalid_cpu),
     .s_axi_bready  (bready_cpu),
 
-    // Master ‰æ? (Êé? SRAM/UART Â§ñËÆæÁä∂Ê?ÅÊú∫)
     .m_axi_aclk    (clk_sram),
     .m_axi_aresetn (sram_resetn),
     .m_axi_arid    (arid_sram),
@@ -211,7 +220,7 @@ axi_cdc_wrapper #(
     .m_axi_awsize  (awsize_sram),
     .m_axi_awburst (awburst_sram),
     .m_axi_awlock  (awlock_sram),
-    .m_axi_awcache (awcache_sram), 
+    .m_axi_awcache (awcache_sram),
     .m_axi_awprot  (awprot_sram),
     .m_axi_awvalid (awvalid_sram),
     .m_axi_awready (awready_sram),
@@ -233,16 +242,16 @@ wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
 async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
-    .clk(clk_sram), 
+    .clk(clk_sram),
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
     .RxD_clear(ext_uart_clear),
     .RxD_data(ext_uart_rx)
 );
 
-assign ext_uart_clear = ext_uart_ready; 
+assign ext_uart_clear = ext_uart_ready;
 async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
-    .clk(clk_sram), 
+    .clk(clk_sram),
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
     .TxD_start(ext_uart_start),
@@ -339,7 +348,7 @@ always @(posedge clk_sram) begin
         if (bvalid_sram && bready_sram) begin
             bvalid_reg <= 0;
         end
-        
+
         if (aw_fire) begin
             aw_recvd <= 1;
             awaddr_reg <= awaddr_sram;
@@ -350,7 +359,7 @@ always @(posedge clk_sram) begin
             wdata_reg <= wdata_sram;
             wstrb_reg <= wstrb_sram;
         end
-        
+
         if ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg) begin
             bvalid_reg <= 1;
             aw_recvd <= 0;
@@ -370,12 +379,11 @@ wire [ 3:0] current_wstrb = w_fire ? wstrb_sram : wstrb_reg;
 
 wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
 wire        mem_we   = do_write;
-wire        mem_re   = rvalid_reg; 
+wire        mem_re   = rvalid_reg;
 
 wire is_base = (mem_addr[31:22] == 10'h070);
 wire is_ext  = (mem_addr[31:22] == 10'h071);
 wire is_uart = (mem_addr[31:20] == 12'h1f0);
-
 
 wire        soft_base_ce_n = ~(is_base && (mem_re || mem_we));
 wire        soft_base_we_n = ~(is_base && mem_we);
@@ -393,27 +401,6 @@ wire [19:0] soft_ext_addr = mem_addr[21:2];
 wire [31:0] soft_ext_dout = current_wdata;
 wire        soft_ext_doe  = (is_ext && mem_we);
 
-
-wire [1:0]  rload_idx;
-wire        rload_go;
-wire        soft_fallback;
-wire        pipe_busy_c;
-wire        soft_fallback_set;
-wire        pipe_go_s;
-wire [1:0]  pipe_idx_s;
-wire        pipe_busy_s, pipe_done_s, pipe_giveup_s;
-wire [31:0] pipe_retarget_pc_s;
-wire        pipe_port_sel;
-
-wire        pipe_base_ce_n, pipe_base_oe_n, pipe_base_we_n, pipe_base_doe;
-wire [3:0]  pipe_base_be_n;
-wire [19:0] pipe_base_addr;
-wire [31:0] pipe_base_dout;
-wire        pipe_ext_ce_n, pipe_ext_oe_n, pipe_ext_we_n, pipe_ext_doe;
-wire [3:0]  pipe_ext_be_n;
-wire [19:0] pipe_ext_addr;
-wire [31:0] pipe_ext_dout;
-
 wire        mux_base_ce_n, mux_base_oe_n, mux_base_we_n, mux_base_doe;
 wire [3:0]  mux_base_be_n;
 wire [19:0] mux_base_addr;
@@ -423,33 +410,10 @@ wire [3:0]  mux_ext_be_n;
 wire [19:0] mux_ext_addr;
 wire [31:0] mux_ext_dout;
 
-la_recipe_loader #(
-    .ENABLE_MASK(4'b1111) 
-) u_rload (
-    .clk(clk_cpu), .resetn(cpu_resetn),
-    .if_addr(if_pc_sniff), .if_addr_ok(if_pc_sniff_ok),
-    .pipe_busy(pipe_busy_c),
-    .soft_fallback_set(soft_fallback_set),
-    .rload_idx(rload_idx), .rload_go(rload_go),
-    .soft_fallback(soft_fallback)
-);
-
-la_pipe_cdc u_pipe_cdc (
-    .clk_cpu(clk_cpu), .resetn_cpu(cpu_resetn),
-    .clk_sram(clk_sram), .resetn_sram(sram_resetn),
-    .rload_go(rload_go && !soft_fallback), .rload_idx(rload_idx),
-    .soft_idle(soft_idle),
-    .pipe_go(pipe_go_s), .pipe_idx(pipe_idx_s),
-    .pipe_busy_s(pipe_busy_s), .pipe_done_s(pipe_done_s),
-    .pipe_retarget_pc_s(pipe_retarget_pc_s), .pipe_giveup_s(pipe_giveup_s),
-    .pipe_hold(pipe_hold), .pipe_retarget_en(pipe_retarget_en),
-    .pipe_retarget_pc(pipe_retarget_pc), .pipe_busy_c(pipe_busy_c),
-    .soft_fallback_set(soft_fallback_set)
-);
 
 la_mem_pipe u_mem_pipe (
     .clk(clk_sram), .resetn(sram_resetn),
-    .pipe_go(pipe_go_s), .pipe_idx(pipe_idx_s),
+    .pipe_go(pipe_go), .pipe_idx(pipe_idx),
     .pipe_busy(pipe_busy_s), .pipe_done(pipe_done_s), .pipe_giveup(pipe_giveup_s),
     .pipe_retarget_pc(pipe_retarget_pc_s), .pipe_port_sel(pipe_port_sel),
     .pipe_base_ce_n(pipe_base_ce_n), .pipe_base_oe_n(pipe_base_oe_n),
@@ -513,7 +477,7 @@ always @(posedge clk_sram) begin
         if (is_uart && do_write && mem_addr[7:0] == 8'h03) begin
             uart_dlab <= current_wdata[7];
         end
-        
+
         if (is_uart && do_write && mem_addr[7:0] == 8'h00 && !uart_dlab) begin
             ext_uart_tx    <= current_wdata[7:0];
             ext_uart_start <= 1;
@@ -532,7 +496,7 @@ always @(posedge clk_sram) begin
             ext_uart_buffer <= ext_uart_rx;
             ext_uart_avai   <= 1;
         end else if (is_uart && mem_re && !mem_we && mem_addr[7:0] == 8'h00) begin
-            ext_uart_avai   <= 0; 
+            ext_uart_avai   <= 0;
         end
     end
 end
@@ -542,7 +506,7 @@ wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 assign rdata_sram = is_base ? base_ram_data :
                     is_ext  ? ext_ram_data  :
                     is_uart ? (
-                        (mem_addr[7:2] == 6'h01) ? {4{uart_status}} : 
+                        (mem_addr[7:2] == 6'h01) ? {4{uart_status}} :
                         (mem_addr[7:2] == 6'h00) ? {24'd0, ext_uart_buffer} : 32'd0
                     ) : 32'd0;
 

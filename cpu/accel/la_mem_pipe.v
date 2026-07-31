@@ -1,7 +1,6 @@
 `include "la_recipe_pkg.vh"
 
-// Unified mem-pipe @ clk_sram. Word addr MUST be byte_addr[21:2]
-// (not (byte_addr>>2)[19:0] — that breaks 0x1c4xxxxx Ext mapping).
+// 统一 mem-pipe：SRAM 时钟下完成四配方访存
 module la_mem_pipe (
     input  wire        clk,
     input  wire        resetn,
@@ -51,17 +50,16 @@ module la_mem_pipe (
     reg [19:0] copy_i;
 
     reg [6:0]  mac_row, mac_col, mac_k;
-    reg [31:0] mac_acc;
-    reg [31:0] mac_a_reg; // M3 timing: A-row read registered before MAC
+    reg        mac_lane;
     reg [2:0]  mac_ph;
-    // M3: cache one A row (96 words) — reused across all cols in the row
-    reg [31:0] mac_arow [0:95];
+    reg [31:0] mac_avec0, mac_avec1, mac_b_reg;
+    reg [31:0] mac_c0_hold, mac_c1_hold;
+    (* ram_style = "distributed" *) reg [31:0] mac_cbuf0 [0:95];
+    (* ram_style = "distributed" *) reg [31:0] mac_cbuf1 [0:95];
 
     reg [31:0] crn_fi, crn_it, crn_a, crn_b, crn_t, crn_t2, crn_a1, crn_a2;
-    // 0=FILL 1=T_R1(fill only) 2=R1 4=W1 6=R2 8=W2  (A2.75)
     reg [3:0]  crn_ph;
 
-    // MIXED — bit-accurate vs UTEST_MIXED (Ext only)
     reg [3:0]  mx_ph;
     reg [15:0] mx_i;
     reg [15:0] mx_stride;
@@ -124,7 +122,7 @@ module la_mem_pipe (
                         2'd1: begin
                             op_sel <= `LA_OP_MAC;
                             mac_row <= 7'd0; mac_col <= 7'd0; mac_k <= 7'd0;
-                            mac_ph <= 3'd0; mac_acc <= 32'd0;
+                            mac_lane <= 1'b0; mac_ph <= 3'd0;
                         end
                         2'd2: begin
                             op_sel <= `LA_OP_CRN_STEP;
@@ -149,92 +147,140 @@ module la_mem_pipe (
                     if (give_cnt >= `LA_GIVEUP_CYCLES)
                         beat_q <= B_GIVEUP;
                     else if (op_sel == `LA_OP_BYPASS) begin
-                        // S1: COPY-local WAIT=1 (MIXED still LA_BASE/EXT_*)
+                        // 配方01：Base读+Ext写并行拷贝
                         if (!phase) begin
                             pipe_base_ce_n <= 1'b0; pipe_base_oe_n <= 1'b0; pipe_base_we_n <= 1'b1;
                             pipe_base_be_n <= 4'h0; pipe_base_addr <= agen0[21:2];
                             if (wait_cnt >= `LA_COPY_BASE_RD_WAIT) begin
                                 word_buf <= base_data_in;
                                 wait_cnt <= 3'd0;
-                                phase <= 1'b1;
+                                agen0    <= agen0 + 32'd4;
+                                phase    <= 1'b1;
                             end else wait_cnt <= wait_cnt + 3'd1;
                         end else begin
                             pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b1; pipe_ext_we_n <= 1'b0;
                             pipe_ext_be_n <= 4'h0; pipe_ext_addr <= agen1[21:2];
                             pipe_ext_dout <= word_buf; pipe_ext_doe <= 1'b1;
+                            if (copy_i != (`LA_COPY_WORDS - 20'd1)) begin
+                                pipe_base_ce_n <= 1'b0; pipe_base_oe_n <= 1'b0; pipe_base_we_n <= 1'b1;
+                                pipe_base_be_n <= 4'h0; pipe_base_addr <= agen0[21:2];
+                            end
                             if (wait_cnt >= `LA_COPY_EXT_WR_WAIT) begin
-                                wait_cnt <= 3'd0; phase <= 1'b0;
+                                wait_cnt <= 3'd0;
                                 if (copy_i == (`LA_COPY_WORDS - 20'd1))
                                     beat_q <= B_DONE;
                                 else begin
-                                    copy_i <= copy_i + 20'd1;
-                                    agen0  <= agen0 + 32'd4;
-                                    agen1  <= agen1 + 32'd4;
+                                    word_buf <= base_data_in;
+                                    agen0    <= agen0 + 32'd4;
+                                    agen1    <= agen1 + 32'd4;
+                                    copy_i   <= copy_i + 20'd1;
                                 end
                             end else wait_cnt <= wait_cnt + 3'd1;
                         end
                     end else if (op_sel == `LA_OP_MAC) begin
-                        // M3: load A[row][*] once, then per-col RD C / RD B[*][col] / WR C
-                        // (M1 WAIT=1 kept; COPY/MIXED still LA_EXT_*)
+                        // 配方02：矩阵乘加
                         case (mac_ph)
                             3'd0: begin
-                                // LOAD_A
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
-                                pipe_ext_addr <= wa(`LA_MAC_A + mac_row * `LA_MAC_STRIDE + {23'd0,mac_k,2'b00});
+                                pipe_ext_addr <= wa(`LA_MAC_C
+                                    + (mac_row + {6'd0,mac_lane}) * `LA_MAC_STRIDE
+                                    + {23'd0,mac_col,2'b00});
                                 if (wait_cnt >= `LA_MAC_RD_WAIT) begin
-                                    mac_arow[mac_k[6:0]] <= ext_data_in;
+                                    if (!mac_lane) mac_cbuf0[mac_col] <= ext_data_in;
+                                    else           mac_cbuf1[mac_col] <= ext_data_in;
                                     wait_cnt <= 3'd0;
-                                    if (mac_k == (`LA_MAC_N-7'd1)) begin
-                                        mac_k <= 7'd0; mac_col <= 7'd0; mac_ph <= 3'd1;
-                                    end else mac_k <= mac_k + 7'd1;
+                                    if (mac_col != (`LA_MAC_N-7'd1))
+                                        mac_col <= mac_col + 7'd1;
+                                    else begin
+                                        mac_col <= 7'd0;
+                                        if (!mac_lane)
+                                            mac_lane <= 1'b1;
+                                        else begin
+                                            mac_lane <= 1'b0; mac_k <= 7'd0; mac_ph <= 3'd1;
+                                        end
+                                    end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
                             3'd1: begin
-                                // RD_C
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
-                                pipe_ext_addr <= wa(`LA_MAC_C + mac_row * `LA_MAC_STRIDE + {23'd0,mac_col,2'b00});
+                                pipe_ext_addr <= wa(`LA_MAC_A
+                                    + (mac_row + {6'd0,mac_lane}) * `LA_MAC_STRIDE
+                                    + {23'd0,mac_k,2'b00});
                                 if (wait_cnt >= `LA_MAC_RD_WAIT) begin
-                                    mac_acc <= ext_data_in; wait_cnt <= 3'd0; mac_k <= 7'd0; mac_ph <= 3'd2;
+                                    if (!mac_lane) mac_avec0 <= ext_data_in;
+                                    else           mac_avec1 <= ext_data_in;
+                                    wait_cnt <= 3'd0;
+                                    if (!mac_lane)
+                                        mac_lane <= 1'b1;
+                                    else begin
+                                        mac_lane <= 1'b0; mac_col <= 7'd0; mac_ph <= 3'd2;
+                                    end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
                             3'd2: begin
-                                // RD_B + MAC with cached A (A registered on wait_cnt==0)
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
-                                pipe_ext_addr <= wa(`LA_MAC_B + mac_k * `LA_MAC_STRIDE + {23'd0,mac_col,2'b00});
+                                pipe_ext_addr <= wa(`LA_MAC_B
+                                    + mac_k * `LA_MAC_STRIDE
+                                    + {23'd0,mac_col,2'b00});
                                 if (wait_cnt == 3'd0) begin
-                                    mac_a_reg <= mac_arow[mac_k[6:0]];
                                     wait_cnt <= 3'd1;
-                                end else if (wait_cnt >= `LA_MAC_RD_WAIT) begin
-                                    mac_acc <= mac_acc + ($signed(mac_a_reg) * $signed(ext_data_in));
+                                end else if (wait_cnt == 3'd1) begin
+                                    mac_b_reg   <= ext_data_in;
+                                    mac_c0_hold <= mac_cbuf0[mac_col];
+                                    mac_c1_hold <= mac_cbuf1[mac_col];
+                                    wait_cnt    <= 3'd2;
+                                end else begin
+                                    mac_cbuf0[mac_col] <= mac_c0_hold
+                                        + ($signed(mac_avec0) * $signed(mac_b_reg));
+                                    mac_cbuf1[mac_col] <= mac_c1_hold
+                                        + ($signed(mac_avec1) * $signed(mac_b_reg));
                                     wait_cnt <= 3'd0;
-                                    if (mac_k == (`LA_MAC_N-7'd1)) mac_ph <= 3'd3;
-                                    else mac_k <= mac_k + 7'd1;
-                                end else wait_cnt <= wait_cnt + 3'd1;
+                                    if (mac_col != (`LA_MAC_N-7'd1))
+                                        mac_col <= mac_col + 7'd1;
+                                    else begin
+                                        mac_col <= 7'd0;
+                                        if (mac_k != (`LA_MAC_N-7'd1)) begin
+                                            mac_k <= mac_k + 7'd1; mac_ph <= 3'd1;
+                                        end else begin
+                                            mac_lane <= 1'b0; mac_ph <= 3'd3;
+                                        end
+                                    end
+                                end
                             end
                             default: begin
-                                // WR_C
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
-                                pipe_ext_addr <= wa(`LA_MAC_C + mac_row * `LA_MAC_STRIDE + {23'd0,mac_col,2'b00});
-                                pipe_ext_dout <= mac_acc; pipe_ext_doe <= 1'b1;
+                                pipe_ext_addr <= wa(`LA_MAC_C
+                                    + (mac_row + {6'd0,mac_lane}) * `LA_MAC_STRIDE
+                                    + {23'd0,mac_col,2'b00});
+                                pipe_ext_dout <= mac_lane ? mac_cbuf1[mac_col] : mac_cbuf0[mac_col];
+                                pipe_ext_doe <= 1'b1;
                                 if (wait_cnt >= `LA_MAC_WR_WAIT) begin
                                     wait_cnt <= 3'd0;
-                                    if (mac_col == (`LA_MAC_N-7'd1)) begin
-                                        mac_col <= 7'd0; mac_k <= 7'd0;
-                                        if (mac_row == (`LA_MAC_N-7'd1)) beat_q <= B_DONE;
-                                        else begin mac_row <= mac_row + 7'd1; mac_ph <= 3'd0; end
-                                    end else begin
-                                        mac_col <= mac_col + 7'd1; mac_ph <= 3'd1;
+                                    if (mac_col != (`LA_MAC_N-7'd1))
+                                        mac_col <= mac_col + 7'd1;
+                                    else begin
+                                        mac_col <= 7'd0;
+                                        if (!mac_lane)
+                                            mac_lane <= 1'b1;
+                                        else begin
+                                            mac_lane <= 1'b0; mac_k <= 7'd0;
+                                            if (mac_row >= (`LA_MAC_N-7'd2))
+                                                beat_q <= B_DONE;
+                                            else begin
+                                                mac_row <= mac_row + 7'd2;
+                                                mac_ph  <= 3'd0;
+                                            end
+                                        end
                                     end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
                         endcase
                     end else if (op_sel == `LA_OP_CRN_STEP) begin
-                        // A2.75: FILL → T_R1 → R1 → W1 → R2 → W2
-                        // Fill keeps T_R1; iter loop W2 → R1 direct (no T_R1).
+                        // 配方03：CryptoNight
                         case (crn_ph)
                             4'd0: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
@@ -245,43 +291,43 @@ module la_mem_pipe (
                                     wait_cnt <= 3'd0;
                                     if (crn_fi+32'd1 == `LA_CRN_FILL) begin
                                         crn_a1 <= `LA_CRN_PAD + ((crn_a & `LA_CRN_MASK)<<2);
-                                        crn_ph <= 4'd1; // T_R1 after fill only
+                                        crn_ph <= 4'd1;
                                     end else crn_fi <= crn_fi + 32'd1;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            4'd1: begin // T_R1: WE#→OE# (fill → first R1)
+                            4'd1: begin
                                 crn_ph <= 4'd2;
                             end
-                            4'd2: begin // R1
+                            4'd2: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
                                 pipe_ext_addr <= crn_a1[21:2];
                                 if (wait_cnt >= `LA_CRN_RD_WAIT) begin
                                     crn_t <= (ext_data_in<<1) ^ (crn_a>>1);
-                                    wait_cnt <= 3'd0; crn_ph <= 4'd4; // W1
+                                    wait_cnt <= 3'd0; crn_ph <= 4'd4;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            4'd4: begin // W1
+                            4'd4: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0; pipe_ext_addr <= crn_a1[21:2];
                                 pipe_ext_dout <= crn_t ^ crn_b; pipe_ext_doe <= 1'b1;
                                 if (wait_cnt >= `LA_CRN_WR_WAIT) begin
                                     crn_b <= crn_t;
                                     crn_a2 <= `LA_CRN_PAD + ((crn_t & `LA_CRN_MASK)<<2);
-                                    wait_cnt <= 3'd0; crn_ph <= 4'd6; // R2
+                                    wait_cnt <= 3'd0; crn_ph <= 4'd6;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            4'd6: begin // R2
+                            4'd6: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
                                 pipe_ext_addr <= crn_a2[21:2];
                                 if (wait_cnt >= `LA_CRN_RD_WAIT) begin
                                     crn_t2 <= ext_data_in;
                                     crn_a  <= crn_a + ($signed(crn_t) * $signed(ext_data_in));
-                                    wait_cnt <= 3'd0; crn_ph <= 4'd8; // W2
+                                    wait_cnt <= 3'd0; crn_ph <= 4'd8;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            default: begin // W2
+                            default: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0; pipe_ext_addr <= crn_a2[21:2];
                                 pipe_ext_dout <= crn_a; pipe_ext_doe <= 1'b1;
@@ -292,15 +338,14 @@ module la_mem_pipe (
                                         crn_a  <= crn_a ^ crn_t2;
                                         crn_a1 <= `LA_CRN_PAD + (((crn_a ^ crn_t2) & `LA_CRN_MASK)<<2);
                                         crn_it <= crn_it + 32'd1;
-                                        crn_ph <= 4'd2; // R1 direct (A2.75)
+                                        crn_ph <= 4'd1;
                                     end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
                         endcase
                     end else begin
-                        // MIXED bit-accurate
+                        // 配方04：MIXED
                         case (mx_ph)
-                            // 0: fill SRC[i] = (i^0x9e37)^(i<<3)
                             4'd0: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
@@ -313,7 +358,6 @@ module la_mem_pipe (
                                     end else mx_i <= mx_i + 16'd1;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            // 1..4: stream load 4 words
                             4'd1: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
@@ -347,11 +391,10 @@ module la_mem_pipe (
                                     mx_s0 <= mx_s0 + mx_w0;
                                     mx_s1 <= mx_s1 ^ mx_w1;
                                     mx_s2 <= mx_s2 + mx_w2;
-                                    mx_s3 <= mx_s3 ^ ext_data_in; // NBA: not mx_w3
+                                    mx_s3 <= mx_s3 ^ ext_data_in;
                                     wait_cnt <= 3'd0; mx_ph <= 4'd5;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            // 5..8: stream store DST (use updated s*)
                             4'd5: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
@@ -396,7 +439,6 @@ module la_mem_pipe (
                                     end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            // 9: stride load SRC[t1 & 0x3fff]
                             4'd9: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_oe_n <= 1'b0; pipe_ext_we_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
@@ -406,7 +448,6 @@ module la_mem_pipe (
                                     wait_cnt <= 3'd0; mx_ph <= 4'd10;
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            // 10: stride store new t1; update s0/s1
                             4'd10: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;
@@ -427,7 +468,6 @@ module la_mem_pipe (
                                     end
                                 end else wait_cnt <= wait_cnt + 3'd1;
                             end
-                            // 11: SIG s0,s1,s2,s3,t1
                             default: begin
                                 pipe_ext_ce_n <= 1'b0; pipe_ext_we_n <= 1'b0; pipe_ext_oe_n <= 1'b1;
                                 pipe_ext_be_n <= 4'h0;

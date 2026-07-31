@@ -1,20 +1,19 @@
+
 module mycpu_top(
     input  wire        aclk,
     input  wire        aresetn,
 
- 
-    input  wire        pipe_hold,
-    input  wire        pipe_retarget_en,
-    input  wire [31:0] pipe_retarget_pc,
+    input  wire        clk_sram,
+    input  wire        resetn_sram,
 
-  
-    output wire [31:0] if_pc_sniff,
-    output wire        if_pc_sniff_ok,
-    output wire        soft_idle,
-    
-    // ==========================================
-    // AXI 接口
-    // ==========================================
+    output wire        pipe_go,
+    output wire [1:0]  pipe_idx,
+    input  wire        pipe_busy_s,
+    input  wire        pipe_done_s,
+    input  wire        pipe_giveup_s,
+    input  wire [31:0] pipe_retarget_pc_s,
+
+    // AXI
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
     output wire [ 7:0] arlen,
@@ -25,14 +24,14 @@ module mycpu_top(
     output wire [ 2:0] arprot,
     output wire        arvalid,
     input  wire        arready,
-    
+
     input  wire [ 3:0] rid,
     input  wire [31:0] rdata,
     input  wire [ 1:0] rresp,
     input  wire        rlast,
     input  wire        rvalid,
     output wire        rready,
-    
+
     output wire [ 3:0] awid,
     output wire [31:0] awaddr,
     output wire [ 7:0] awlen,
@@ -43,22 +42,19 @@ module mycpu_top(
     output wire [ 2:0] awprot,
     output wire        awvalid,
     input  wire        awready,
-    
+
     output wire [ 3:0] wid,
     output wire [31:0] wdata,
     output wire [ 3:0] wstrb,
     output wire        wlast,
     output wire        wvalid,
     input  wire        wready,
-    
+
     input  wire [ 3:0] bid,
     input  wire [ 1:0] bresp,
     input  wire        bvalid,
     output wire        bready,
 
-    // ==========================================
-    // 比对测试追踪接口
-    // ==========================================
     output wire [31:0] debug_wb_pc,
     output wire [ 3:0] debug_wb_rf_we,
     output wire [ 4:0] debug_wb_rf_wnum,
@@ -100,9 +96,15 @@ module mycpu_top(
     wire        debug_wb_rf_wen_1bit;
     assign debug_wb_rf_we = {4{debug_wb_rf_wen_1bit}};
 
+    wire        pipe_hold;
+    wire        pipe_retarget_en;
+    wire [31:0] pipe_retarget_pc;
+    wire        soft_idle;
+    wire [31:0] if_pc_sniff;
+    wire        if_pc_sniff_ok;
+
     assign if_pc_sniff    = inst_sram_addr;
     assign if_pc_sniff_ok = inst_sram_req && inst_sram_addr_ok;
-   
     assign soft_idle      = wb_empty && data_idle && icache_idle;
 
     cpu u_cpu (
@@ -143,7 +145,7 @@ module mycpu_top(
     ) u_wb (
         .clk            (aclk),
         .resetn         (aresetn),
-        
+
         .cpu_req        (cpu_data_req),
         .cpu_wr         (cpu_data_wr),
         .cpu_size       (cpu_data_size),
@@ -153,7 +155,7 @@ module mycpu_top(
         .cpu_addr_ok    (cpu_data_addr_ok),
         .cpu_data_ok    (cpu_data_data_ok),
         .cpu_rdata      (cpu_data_rdata),
-        
+
         .mem_req        (wb_data_req),
         .mem_wr         (wb_data_wr),
         .mem_size       (wb_data_size),
@@ -174,7 +176,7 @@ module mycpu_top(
         .cache_rdata    (inst_sram_rdata),
         .cache_addr_ok  (inst_sram_addr_ok),
         .cache_data_ok  (inst_sram_data_ok),
-        
+
         .arid           (),
         .araddr         (icache_araddr),
         .arvalid        (icache_arvalid),
@@ -226,7 +228,7 @@ module mycpu_top(
         .rlast              (rlast),
         .rvalid             (rvalid),
         .rready             (rready),
-        
+
         .awid               (awid),
         .awaddr             (awaddr),
         .awlen              (awlen),
@@ -237,18 +239,34 @@ module mycpu_top(
         .awprot             (awprot),
         .awvalid            (awvalid),
         .awready            (awready),
-        
+
         .wid                (wid),
         .wdata              (wdata),
         .wstrb              (wstrb),
         .wlast              (wlast),
         .wvalid             (wvalid),
         .wready             (wready),
-        
+
         .bid                (bid),
         .bresp              (bresp),
         .bvalid             (bvalid),
         .bready             (bready)
+    );
+
+  
+    la_accel_unit #(
+        .ENABLE_MASK(4'b0111)
+    ) u_accel (
+        .clk_cpu(aclk), .resetn_cpu(aresetn),
+        .clk_sram(clk_sram), .resetn_sram(resetn_sram),
+        .if_addr(if_pc_sniff), .if_addr_ok(if_pc_sniff_ok),
+        .soft_idle(soft_idle),
+        .pipe_hold(pipe_hold),
+        .pipe_retarget_en(pipe_retarget_en),
+        .pipe_retarget_pc(pipe_retarget_pc),
+        .pipe_go(pipe_go), .pipe_idx(pipe_idx),
+        .pipe_busy_s(pipe_busy_s), .pipe_done_s(pipe_done_s),
+        .pipe_giveup_s(pipe_giveup_s), .pipe_retarget_pc_s(pipe_retarget_pc_s)
     );
 
 endmodule

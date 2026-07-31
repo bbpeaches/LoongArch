@@ -37,7 +37,6 @@ module bpu (
     wire upd_cond_en = upd_en && (upd_br_type == 2'b00);
     wire upd_btb_inv_en = upd_en && (upd_br_type == 2'b01) && !upd_actually_taken;
     wire upd_btb_we = upd_en && !upd_btb_inv_en && ((upd_br_type != 2'b00) || upd_actually_taken);
-    wire upd_loop_en = upd_cond_en && (upd_target < upd_pc);
     wire        btb_hit;
     wire [ 1:0] btb_type;
     wire [31:0] btb_target_out;
@@ -57,14 +56,14 @@ module bpu (
         .upd_cond_en(upd_cond_en), .upd_pc(upd_pc[9:2]), .upd_ghr(upd_ghr), .upd_actually_taken(upd_actually_taken)
     );
 
-    wire loop_valid_pred, loop_pred_taken;
-    loop_bpu _loop (
-        .clk(clk), .resetn(resetn), .pc(pc[21:2]),
-        .loop_valid_pred(loop_valid_pred), .loop_pred_taken(loop_pred_taken),
-        .upd_loop_en(upd_loop_en), .upd_pc(upd_pc[21:2]), .upd_actually_taken(upd_actually_taken),
-        .stat_loop_hits(stat_loop_hits), .stat_loop_confident(stat_loop_confident), .stat_loop_correct(stat_loop_correct), .stat_loop_wrong(stat_loop_wrong),
-        .stat_override_taken(stat_loop_override_taken), .stat_override_wrong(stat_loop_override_wrong)
-    );
+    // Timing @150MHz: loop_bpu tag mux was on next_pc critical path (WNS~0).
+    // Drop IF override; keep tournament+BTB same-cycle. UTEST hot loops → la_mem_pipe.
+    assign stat_loop_hits            = 32'd0;
+    assign stat_loop_confident       = 32'd0;
+    assign stat_loop_correct         = 32'd0;
+    assign stat_loop_wrong           = 32'd0;
+    assign stat_loop_override_taken  = 32'd0;
+    assign stat_loop_override_wrong  = 32'd0;
 
     wire [31:0] ras_target;
     wire        ras_valid;
@@ -75,13 +74,12 @@ module bpu (
     );
 
     wire is_fetch_ret  = (btb_type == 2'b11);
-    wire final_cond_pred = loop_valid_pred ? loop_pred_taken : meta_taken;
+    wire final_cond_pred = meta_taken;
     wire is_fetch_cond   = (btb_type == 2'b00);
 
     assign pred_target = (btb_hit && is_fetch_ret && ras_valid) ? ras_target : btb_target_out;
     assign pred_taken  = btb_hit && (!is_fetch_cond || final_cond_pred);
 
-    wire pred_used_loop = btb_hit && is_fetch_cond && loop_valid_pred;
     wire pred_used_ret  = btb_hit && is_fetch_ret;
     wire pred_ret_taken = btb_hit && is_fetch_ret && ras_valid;
 
@@ -100,7 +98,6 @@ module bpu (
         end else begin
             if (btb_hit) stat_btb_hits <= stat_btb_hits + 1;
             if (btb_hit && is_fetch_cond) stat_cond_preds <= stat_cond_preds + 1;
-            if (pred_used_loop) stat_loop_overrides <= stat_loop_overrides + 1;
             if (pred_used_ret) stat_ret_preds <= stat_ret_preds + 1;
             if (pred_ret_taken) stat_ras_valid_preds <= stat_ras_valid_preds + 1;
             if (btb_hit && is_fetch_ret && !ras_valid) stat_ras_fallbacks <= stat_ras_fallbacks + 1;
