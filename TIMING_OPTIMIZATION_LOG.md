@@ -33,3 +33,21 @@
   bitstream remains archived for traceability only:
   `C:\Users\27166\Desktop\thinpad_top_20260731_224958.bit`
 - SHA-256: `8013159D0A791654838CD5F1BBFB80A81268EC77BBE18E761352C7F0687667C5`
+
+## 2026-07-31 23:15:42 CST — register-qualified load response
+
+- Changed `cpu/write_buffer.v`: a load `cpu_data_ok` now requires the
+  already-registered `S_DO_LOAD` state.  The AXI bridge can only return read
+  data after an accepted request, so this removes an unreachable same-cycle
+  request/response branch from the response qualifier without changing the
+  request path, pipeline depth, clock, or multiply issue timing.
+- Default implementation flow only; no strategy, directive, or clock change.
+
+| Metric | Prior accepted revision | This revision | Delta |
+| --- | ---: | ---: | ---: |
+| Setup WNS | -2.346 ns | -1.432 ns | +0.914 ns |
+| Setup TNS | -2113.641 ns | -494.038 ns | +1619.603 ns |
+| Hold WHS | +0.071 ns | +0.036 ns | -0.035 ns (still met) |
+
+- Archived bitstream: `C:\Users\27166\Desktop\thinpad_top_20260731_231542.bit`
+- SHA-256: `6CBC3D9B9CDEDFD00728A38E4ABC6E3D917A59A88CAFE93376198C91F874395B`

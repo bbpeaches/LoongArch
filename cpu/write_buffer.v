@@ -142,8 +142,13 @@ module write_buffer #(
     assign cpu_addr_ok = (store_req && store_accept) ||
                          (load_req && req_load_active && mem_addr_ok && !mem_addr_rcv);
 
+    // Read data returns through the AXI bridge after the request has entered
+    // S_DO_LOAD.  Do not let the current request/address CAM feed the data
+    // response qualifier: it cannot complete a new AXI read in the same
+    // cycle, and keeping that zero-latency branch creates a long false
+    // EX-address-to-global-stall combinational cone.
     assign cpu_data_ok = (store_req && store_accept) ||
-                         (req_load_active && mem_data_ok);
+                         ((state == S_DO_LOAD) && mem_data_ok);
 
     assign cpu_rdata   = mem_rdata;
 
