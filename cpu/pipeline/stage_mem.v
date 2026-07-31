@@ -9,6 +9,7 @@ module stage_mem (
 
     input  wire [31:0] data_sram_rdata,
     input  wire        data_sram_resp_valid,
+    input  wire        mul_result_valid,
 
     output wire [31:0] mem_final_data,
     output wire        mem_done,
@@ -25,8 +26,16 @@ module stage_mem (
                                 mem_is_ld_bu ? {24'd0, lb_data}            :
                                 data_sram_rdata;
 
-    assign mem_done       = !mem_valid || !mem_is_load || data_sram_resp_valid;
-    assign mem_wait       = mem_valid && mem_is_load && !data_sram_resp_valid;
+    // Loads and multiplies are the two result-producing operations that can
+    // wait in MEM.  The multiply response is explicit rather than inferred
+    // from a fixed number of pipeline cycles.
+    assign mem_done       = !mem_valid ||
+                            (!mem_is_load && !mem_is_mul) ||
+                            (mem_is_load && data_sram_resp_valid) ||
+                            (mem_is_mul && mul_result_valid);
+    assign mem_wait       = mem_valid &&
+                            ((mem_is_load && !data_sram_resp_valid) ||
+                             (mem_is_mul  && !mul_result_valid));
     assign mem_final_data = mem_is_load ? mem_ram_rdata :
                             mem_is_mul  ? mem_mul_result : mem_result;
 

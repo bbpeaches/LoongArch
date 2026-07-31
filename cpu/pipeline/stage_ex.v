@@ -1,6 +1,4 @@
 module stage_ex (
-    input  wire        clk,
-    input  wire        resetn,
     input  wire        stall_ex,
 
     input  wire [31:0] ex_pc,
@@ -26,7 +24,6 @@ module stage_ex (
     input  wire [31:0] ex_normal_br_target, 
 
     output wire [31:0] ex_result,
-    output wire [31:0] ex_mul_result,
     output wire [ 1:0] ex_addr_align,
 
     output wire        data_sram_en,
@@ -48,15 +45,6 @@ module stage_ex (
 
     alu_top _alu_top (
         .alu_op(ex_alu_op), .alu_src1(ex_alu_src1), .alu_src2(ex_alu_src2), .alu_result(ex_alu_result)
-    );
-
-    mul_top _mul_top (
-        .clk(clk), 
-        .ce(1'b1),
-        .resetn(resetn), 
-        .x(ex_alu_src1), 
-        .y(ex_alu_src2), 
-        .result(ex_mul_result)
     );
 
     wire [31:0] ex_mem_addr;

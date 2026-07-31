@@ -50,6 +50,8 @@ module cpu(
     wire [31:0] internal_data_addr;
     wire [31:0] internal_data_wdata;
     wire         mem_wait;
+    wire         data_mem_wait;
+    wire         mul_mem_wait;
     wire         ex_is_st_w;
     wire         ex_is_st_b;
 
@@ -77,7 +79,8 @@ module cpu(
     assign data_sram_addr  = internal_data_addr;
     assign data_sram_wdata = internal_data_wdata;
 
-    assign mem_wait = internal_data_en & ~data_sram_data_ok;
+    assign data_mem_wait = internal_data_en & ~data_sram_data_ok;
+    assign mem_wait      = data_mem_wait | mul_mem_wait;
 
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
@@ -291,6 +294,28 @@ module cpu(
     wire [31:0] id_normal_br_target;
     wire        ex_fw_valid;
 
+    // mult_gen_0 has a two-stage pipeline.  Feed it when the multiply is
+    // admitted into ID/EX, one cycle before the instruction reaches EX.  CE
+    // stays asserted to move earlier products through the IP pipeline; zeroes
+    // are injected for non-multiply slots and their results are ignored.
+    wire mul_issue = resetn && id_valid_inst && (id_wb_sel == 2'b10) &&
+                     !stall[1] && !flush[2];
+    wire [31:0] mul_operand_a = mul_issue ? id_alu_src1 : 32'd0;
+    wire [31:0] mul_operand_b = mul_issue ? id_alu_src2 : 32'd0;
+    wire [31:0] mul_result;
+    wire        mul_result_valid;
+
+    mul_top _mul_top (
+        .clk     (clk),
+        .ce      (1'b1),
+        .resetn  (resetn),
+        .issue_valid(mul_issue),
+        .x       (mul_operand_a),
+        .y       (mul_operand_b),
+        .result  (mul_result),
+        .result_valid(mul_result_valid)
+    );
+
     stage_id _stage_id (
         .clk(clk), .resetn(resetn), .ex_fw_valid(ex_fw_valid),
         .id_pc(id_pc),
@@ -351,20 +376,18 @@ module cpu(
     // EX 阶段
     // ==========================================
     
-    wire [31:0] mem_pc, mem_result, mem_mul_result;
+    wire [31:0] mem_pc, mem_result;
     wire [ 1:0] mem_wb_sel, mem_addr_align;
     wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
     wire [ 1:0] ex_addr_align;
     wire         ex_mem_read;
-    wire [31:0] ex_mul_result;
     wire         ex_is_mul = (ex_wb_sel == 2'b10);
     assign ex_fw_valid = !ex_is_mul && !ex_mem_read;
 
     wire mem_is_load = (mem_wb_sel == 2'b01);
+    wire mem_is_mul  = (mem_wb_sel == 2'b10);
 
     stage_ex _stage_ex (
-        .clk(clk),
-        .resetn(resetn),
         .stall_ex(stall[2]),
         .ex_pc(ex_pc), .ex_wb_sel(ex_wb_sel), .ex_mem_en(ex_mem_en),
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
@@ -377,7 +400,7 @@ module cpu(
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target), 
         
-        .ex_result(ex_result), .ex_mul_result(ex_mul_result), .ex_addr_align(ex_addr_align),
+        .ex_result(ex_result), .ex_addr_align(ex_addr_align),
         .data_sram_en(internal_data_en),       
         .data_sram_wen(internal_data_wen),     
         .data_sram_addr(internal_data_addr),   
@@ -389,7 +412,48 @@ module cpu(
         .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
     );
 
-    assign mem_mul_result = ex_mul_result;
+    // The multiplier has no ready signal.  Preserve its in-order responses
+    // until the matching multiply reaches MEM, so a future global pipeline
+    // stall cannot overwrite a completed product with a later IP output.
+    localparam MUL_RESULT_FIFO_DEPTH = 4;
+    reg [31:0] mul_result_fifo [0:MUL_RESULT_FIFO_DEPTH-1];
+    reg [1:0]  mul_result_fifo_head;
+    reg [1:0]  mul_result_fifo_tail;
+    reg [2:0]  mul_result_fifo_count;
+
+    wire        mul_result_fifo_empty = (mul_result_fifo_count == 3'd0);
+    wire        mul_result_available  = !mul_result_fifo_empty || mul_result_valid;
+    wire [31:0] mem_mul_result = mul_result_fifo_empty ? mul_result :
+                                                        mul_result_fifo[mul_result_fifo_head];
+
+    // A response can bypass an empty FIFO directly into MEM.  When a prior
+    // response is buffered, dequeue it first and enqueue the new one in the
+    // same cycle, preserving multiply program order.
+    wire mul_result_consume = mem_valid && mem_is_mul && mul_result_available;
+    wire mul_result_push    = mul_result_valid &&
+                              !(mul_result_fifo_empty && mul_result_consume);
+    wire mul_result_pop     = !mul_result_fifo_empty && mul_result_consume;
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            mul_result_fifo_head  <= 2'd0;
+            mul_result_fifo_tail  <= 2'd0;
+            mul_result_fifo_count <= 3'd0;
+        end else begin
+            if (mul_result_push) begin
+                mul_result_fifo[mul_result_fifo_tail] <= mul_result;
+                mul_result_fifo_tail <= mul_result_fifo_tail + 2'd1;
+            end
+            if (mul_result_pop) begin
+                mul_result_fifo_head <= mul_result_fifo_head + 2'd1;
+            end
+            case ({mul_result_push, mul_result_pop})
+                2'b10: mul_result_fifo_count <= mul_result_fifo_count + 3'd1;
+                2'b01: mul_result_fifo_count <= mul_result_fifo_count - 3'd1;
+                default: mul_result_fifo_count <= mul_result_fifo_count;
+            endcase
+        end
+    end
 
     ex_mem_reg _ex_mem_reg (
         .clk(clk), .resetn(resetn), .stall(stall[2]), .flush(flush[3]),
@@ -420,7 +484,8 @@ module cpu(
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_mul_result(mem_mul_result), .mem_valid(mem_valid),
         .data_sram_rdata(actual_data_rdata),
         .data_sram_resp_valid(1'b1),
-        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait()
+        .mul_result_valid(mul_result_available),
+        .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait(mul_mem_wait)
     );
 
     wire [31:0] wb_pc;
@@ -443,8 +508,6 @@ module cpu(
     // Hazard Ctrl
     // ==========================================
     hazard_ctrl _hazard_ctrl (
-        .clk           (clk),
-        .resetn        (resetn),
         .ex_valid_inst (ex_valid_inst),
         .id_valid      (id_valid),     
         .id_inst       (id_inst),       

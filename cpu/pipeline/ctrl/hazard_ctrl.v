@@ -1,6 +1,4 @@
 module hazard_ctrl (
-    input  wire        clk,
-    input  wire        resetn,
     input  wire        ex_valid_inst,
     input  wire        id_valid,    
     input  wire [31:0] id_inst,       
@@ -40,26 +38,14 @@ module hazard_ctrl (
     wire store_data_dep = is_store && !dep_rs1_raw && dep_rs2_raw;
     wire normal_load_use = ex_mem_read && ex_dep_hit && !store_data_dep;
 
-    wire mul_use_hazard  = ex_is_mul && ex_dep_hit;
+    // The multiplier is launched from ID and its two-stage result reaches MEM
+    // with the producing instruction.  Only a direct RAW consumer must wait.
+    wire mul_use_hazard  = ex_valid_inst && ex_is_mul && ex_dep_hit;
 
     (* max_fanout = 8 *) wire stall_req_from_id = normal_load_use || mul_use_hazard;
 
-    reg mul_stall_q;
-    always @(posedge clk) begin
-        if (~resetn) begin
-            mul_stall_q <= 1'b0;
-        end else if (mem_wait) begin
-            mul_stall_q <= mul_stall_q; 
-        end else if (ex_is_mul && ex_valid_inst && !mul_stall_q) begin
-            mul_stall_q <= 1'b1;        
-        end else begin
-            mul_stall_q <= 1'b0;        
-        end
-    end
-    wire stall_req_from_ex = ex_is_mul && ex_valid_inst && !mul_stall_q;
-
     ctrl _sys_ctrl (
-        .stall_from_ex  (stall_req_from_ex),
+        .stall_from_ex  (1'b0),
         .stall_from_id  (stall_req_from_id),
         .stall_from_if  (if_wait),
         .stall_from_mem (mem_wait),
