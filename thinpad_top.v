@@ -62,62 +62,6 @@ end
 wire cpu_resetn = cpu_reset_sync;
 wire sram_resetn = cpu_resetn;
 
-wire [ 3:0] arid_cpu, arlen_cpu, arcache_cpu, awid_cpu, awlen_cpu, awcache_cpu, wid_cpu, wstrb_cpu, rid_cpu, bid_cpu;
-wire [31:0] araddr_cpu, rdata_cpu, awaddr_cpu, wdata_cpu;
-wire [ 2:0] arsize_cpu, arprot_cpu, awsize_cpu, awprot_cpu;
-wire [ 1:0] arburst_cpu, arlock_cpu, awburst_cpu, awlock_cpu, rresp_cpu, bresp_cpu;
-wire arvalid_cpu, arready_cpu, rlast_cpu, rvalid_cpu, rready_cpu;
-wire awvalid_cpu, awready_cpu, wlast_cpu, wvalid_cpu, wready_cpu;
-wire bvalid_cpu, bready_cpu;
-
-mycpu_top u_cpu (
-    .aclk       (clk_cpu),
-    .aresetn    (cpu_resetn),
-
-    .arid       (arid_cpu),
-    .araddr     (araddr_cpu),
-    .arlen      (arlen_cpu),
-    .arsize     (arsize_cpu),
-    .arburst    (arburst_cpu),
-    .arlock     (arlock_cpu),
-    .arcache    (arcache_cpu),
-    .arprot     (arprot_cpu),
-    .arvalid    (arvalid_cpu),
-    .arready    (arready_cpu),
-
-    .rid        (rid_cpu),
-    .rdata      (rdata_cpu),
-    .rresp      (rresp_cpu),
-    .rlast      (rlast_cpu),
-    .rvalid     (rvalid_cpu),
-    .rready     (rready_cpu),
-
-    .awid       (awid_cpu),
-    .awaddr     (awaddr_cpu),
-    .awlen      (awlen_cpu),
-    .awsize     (awsize_cpu),
-    .awburst    (awburst_cpu),
-    .awlock     (awlock_cpu),
-    .awcache    (awcache_cpu),
-    .awprot     (awprot_cpu),
-    .awvalid    (awvalid_cpu),
-    .awready    (awready_cpu),
-
-    .wid        (wid_cpu),
-    .wdata      (wdata_cpu),
-    .wstrb      (wstrb_cpu),
-    .wlast      (wlast_cpu),
-    .wvalid     (wvalid_cpu),
-    .wready     (wready_cpu),
-
-    .bid        (bid_cpu),
-    .bresp      (bresp_cpu),
-    .bvalid     (bvalid_cpu),
-    .bready     (bready_cpu),
-
-    .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
-);
-
 wire [ 3:0] arid_sram, arlen_sram, arcache_sram, awid_sram, awlen_sram, awcache_sram, wid_sram, wstrb_sram, rid_sram, bid_sram;
 wire [31:0] araddr_sram, rdata_sram, awaddr_sram, wdata_sram;
 wire [ 2:0] arsize_sram, arprot_sram, awsize_sram, awprot_sram;
@@ -126,45 +70,53 @@ wire arvalid_sram, arready_sram, rlast_sram, rvalid_sram, rready_sram;
 wire awvalid_sram, awready_sram, wlast_sram, wvalid_sram, wready_sram;
 wire bvalid_sram, bready_sram;
 
-assign arid_sram    = arid_cpu;
-assign araddr_sram  = araddr_cpu;
-assign arlen_sram   = arlen_cpu;
-assign arsize_sram  = arsize_cpu;
-assign arburst_sram = arburst_cpu;
-assign arlock_sram  = arlock_cpu;
-assign arcache_sram = arcache_cpu;
-assign arprot_sram  = arprot_cpu;
-assign arvalid_sram = arvalid_cpu;
-assign arready_cpu  = arready_sram;
+mycpu_top u_cpu (
+    .aclk       (clk_cpu),
+    .aresetn    (cpu_resetn),
 
-assign rid_cpu      = rid_sram;
-assign rdata_cpu    = rdata_sram;
-assign rresp_cpu    = rresp_sram;
-assign rlast_cpu    = rlast_sram;
-assign rvalid_cpu   = rvalid_sram;
-assign rready_sram  = rready_cpu;
+    .arid       (arid_sram),
+    .araddr     (araddr_sram),
+    .arlen      (arlen_sram),
+    .arsize     (arsize_sram),
+    .arburst    (arburst_sram),
+    .arlock     (arlock_sram),
+    .arcache    (arcache_sram),
+    .arprot     (arprot_sram),
+    .arvalid    (arvalid_sram),
+    .arready    (arready_sram),
 
-assign awid_sram    = awid_cpu;
-assign awaddr_sram  = awaddr_cpu;
-assign awlen_sram   = awlen_cpu;
-assign awsize_sram  = awsize_cpu;
-assign awburst_sram = awburst_cpu;
-assign awlock_sram  = awlock_cpu;
-assign awcache_sram = awcache_cpu;
-assign awprot_sram  = awprot_cpu;
-assign awvalid_sram = awvalid_cpu;
-assign awready_cpu  = awready_sram;
+    .rid        (rid_sram),
+    .rdata      (rdata_sram),
+    .rresp      (rresp_sram),
+    .rlast      (rlast_sram),
+    .rvalid     (rvalid_sram),
+    .rready     (rready_sram),
 
-assign wdata_sram   = wdata_cpu;
-assign wstrb_sram   = wstrb_cpu;
-assign wlast_sram   = wlast_cpu;
-assign wvalid_sram  = wvalid_cpu;
-assign wready_cpu   = wready_sram;
+    .awid       (awid_sram),
+    .awaddr     (awaddr_sram),
+    .awlen      (awlen_sram),
+    .awsize     (awsize_sram),
+    .awburst    (awburst_sram),
+    .awlock     (awlock_sram),
+    .awcache    (awcache_sram),
+    .awprot     (awprot_sram),
+    .awvalid    (awvalid_sram),
+    .awready    (awready_sram),
 
-assign bid_cpu      = bid_sram;
-assign bresp_cpu    = bresp_sram;
-assign bvalid_cpu   = bvalid_sram;
-assign bready_sram  = bready_cpu;
+    .wid        (wid_sram),
+    .wdata      (wdata_sram),
+    .wstrb      (wstrb_sram),
+    .wlast      (wlast_sram),
+    .wvalid     (wvalid_sram),
+    .wready     (wready_sram),
+
+    .bid        (bid_sram),
+    .bresp      (bresp_sram),
+    .bvalid     (bvalid_sram),
+    .bready     (bready_sram),
+
+    .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
+);
 
 wire [7:0] ext_uart_rx;
 reg  [7:0] ext_uart_buffer;
