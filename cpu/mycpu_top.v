@@ -3,16 +3,6 @@ module mycpu_top(
     input  wire        aclk,
     input  wire        aresetn,
 
-    input  wire        clk_sram,
-    input  wire        resetn_sram,
-
-    output wire        pipe_go,
-    output wire [1:0]  pipe_idx,
-    input  wire        pipe_busy_s,
-    input  wire        pipe_done_s,
-    input  wire        pipe_giveup_s,
-    input  wire [31:0] pipe_retarget_pc_s,
-
     // AXI
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
@@ -87,8 +77,6 @@ module mycpu_top(
     wire        wb_data_data_ok;
     wire [31:0] wb_data_rdata;
     wire        wb_empty;
-    wire        data_idle;
-    wire        icache_idle;
 
     wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
     wire [31:0] icache_araddr, icache_rdata;
@@ -96,23 +84,9 @@ module mycpu_top(
     wire        debug_wb_rf_wen_1bit;
     assign debug_wb_rf_we = {4{debug_wb_rf_wen_1bit}};
 
-    wire        pipe_hold;
-    wire        pipe_retarget_en;
-    wire [31:0] pipe_retarget_pc;
-    wire        soft_idle;
-    wire [31:0] if_pc_sniff;
-    wire        if_pc_sniff_ok;
-
-    assign if_pc_sniff    = inst_sram_addr;
-    assign if_pc_sniff_ok = inst_sram_req && inst_sram_addr_ok;
-    assign soft_idle      = wb_empty && data_idle && icache_idle;
-
     cpu u_cpu (
         .clk                (aclk),
         .resetn             (aresetn),
-        .pipe_hold          (pipe_hold),
-        .pipe_retarget_en   (pipe_retarget_en),
-        .pipe_retarget_pc   (pipe_retarget_pc),
 
         .inst_sram_req      (inst_sram_req),
         .inst_sram_wr       (),
@@ -209,8 +183,6 @@ module mycpu_top(
         .data_addr_ok       (wb_data_addr_ok),
         .data_data_ok       (wb_data_data_ok),
         .data_rdata         (wb_data_rdata),
-        .data_idle          (data_idle),
-        .icache_idle        (icache_idle),
 
         .arid               (arid),
         .araddr             (araddr),
@@ -251,22 +223,6 @@ module mycpu_top(
         .bresp              (bresp),
         .bvalid             (bvalid),
         .bready             (bready)
-    );
-
-  
-    la_accel_unit #(
-        .ENABLE_MASK(4'b0111)
-    ) u_accel (
-        .clk_cpu(aclk), .resetn_cpu(aresetn),
-        .clk_sram(clk_sram), .resetn_sram(resetn_sram),
-        .if_addr(if_pc_sniff), .if_addr_ok(if_pc_sniff_ok),
-        .soft_idle(soft_idle),
-        .pipe_hold(pipe_hold),
-        .pipe_retarget_en(pipe_retarget_en),
-        .pipe_retarget_pc(pipe_retarget_pc),
-        .pipe_go(pipe_go), .pipe_idx(pipe_idx),
-        .pipe_busy_s(pipe_busy_s), .pipe_done_s(pipe_done_s),
-        .pipe_giveup_s(pipe_giveup_s), .pipe_retarget_pc_s(pipe_retarget_pc_s)
     );
 
 endmodule

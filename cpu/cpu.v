@@ -1,9 +1,5 @@
 module cpu(
     input         clk, resetn,
-
-    input          pipe_hold,
-    input          pipe_retarget_en,
-    input  [31:0]  pipe_retarget_pc,
     
     output         inst_sram_req,
     output         inst_sram_wr,
@@ -78,7 +74,7 @@ module cpu(
     assign data_sram_addr  = internal_data_addr;
     assign data_sram_wdata = internal_data_wdata;
 
-    assign mem_wait = pipe_hold | (internal_data_en & ~data_sram_data_ok);
+    assign mem_wait = internal_data_en & ~data_sram_data_ok;
 
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
@@ -142,11 +138,8 @@ module cpu(
         .clk(clk), .resetn(resetn), .stall_if(fetch_pc_stall),
         .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), 
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
-        .pipe_hold(pipe_hold),
-        .pipe_retarget_en(pipe_retarget_en),
-        .pipe_retarget_pc(pipe_retarget_pc),
-        .inst_sram_en(internal_inst_en),        
-        .inst_sram_addr(internal_inst_addr),   
+        .inst_sram_en(internal_inst_en),
+        .inst_sram_addr(internal_inst_addr),
         .if_pc(if_pc), .if_req_fire(if_req_fire)
     );
 

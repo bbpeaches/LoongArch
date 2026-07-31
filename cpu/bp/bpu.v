@@ -57,7 +57,7 @@ module bpu (
     );
 
     // Timing @150MHz: loop_bpu tag mux was on next_pc critical path (WNS~0).
-    // Drop IF override; keep tournament+BTB same-cycle. UTEST hot loops → la_mem_pipe.
+    // Drop IF override; keep tournament+BTB same-cycle for hot loops.
     assign stat_loop_hits            = 32'd0;
     assign stat_loop_confident       = 32'd0;
     assign stat_loop_correct         = 32'd0;

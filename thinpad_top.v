@@ -44,11 +44,12 @@ module thinpad_top(
     output wire video_de
 );
 
-wire locked, clk_cpu, clk_sram;
+wire locked, clk_cpu, clk_sram_unused;
+wire clk_sram = clk_cpu;
 pll_example clock_gen (
   .clk_in1(clk_50M),
   .clk_out1(clk_cpu),
-  .clk_out2(clk_sram),
+  .clk_out2(clk_sram_unused),
   .reset(reset_btn),
   .locked(locked)
 );
@@ -59,13 +60,7 @@ always @(posedge clk_cpu or negedge locked) begin
     else         cpu_reset_sync <= 1'b1;
 end
 wire cpu_resetn = cpu_reset_sync;
-
-reg sram_reset_sync;
-always @(posedge clk_sram or negedge locked) begin
-    if (~locked) sram_reset_sync <= 1'b0;
-    else         sram_reset_sync <= 1'b1;
-end
-wire sram_resetn = sram_reset_sync;
+wire sram_resetn = cpu_resetn;
 
 wire [ 3:0] arid_cpu, arlen_cpu, arcache_cpu, awid_cpu, awlen_cpu, awcache_cpu, wid_cpu, wstrb_cpu, rid_cpu, bid_cpu;
 wire [31:0] araddr_cpu, rdata_cpu, awaddr_cpu, wdata_cpu;
@@ -75,33 +70,9 @@ wire arvalid_cpu, arready_cpu, rlast_cpu, rvalid_cpu, rready_cpu;
 wire awvalid_cpu, awready_cpu, wlast_cpu, wvalid_cpu, wready_cpu;
 wire bvalid_cpu, bready_cpu;
 
-wire        pipe_go;
-wire [1:0]  pipe_idx;
-wire        pipe_busy_s, pipe_done_s, pipe_giveup_s;
-wire [31:0] pipe_retarget_pc_s;
-wire        pipe_port_sel;
-wire        pipe_base_ce_n, pipe_base_oe_n, pipe_base_we_n, pipe_base_doe;
-wire [3:0]  pipe_base_be_n;
-wire [19:0] pipe_base_addr;
-wire [31:0] pipe_base_dout;
-wire        pipe_ext_ce_n, pipe_ext_oe_n, pipe_ext_we_n, pipe_ext_doe;
-wire [3:0]  pipe_ext_be_n;
-wire [19:0] pipe_ext_addr;
-wire [31:0] pipe_ext_dout;
-
 mycpu_top u_cpu (
     .aclk       (clk_cpu),
     .aresetn    (cpu_resetn),
-
-    .clk_sram   (clk_sram),
-    .resetn_sram(sram_resetn),
-
-    .pipe_go            (pipe_go),
-    .pipe_idx           (pipe_idx),
-    .pipe_busy_s        (pipe_busy_s),
-    .pipe_done_s        (pipe_done_s),
-    .pipe_giveup_s      (pipe_giveup_s),
-    .pipe_retarget_pc_s (pipe_retarget_pc_s),
 
     .arid       (arid_cpu),
     .araddr     (araddr_cpu),
@@ -155,85 +126,45 @@ wire arvalid_sram, arready_sram, rlast_sram, rvalid_sram, rready_sram;
 wire awvalid_sram, awready_sram, wlast_sram, wvalid_sram, wready_sram;
 wire bvalid_sram, bready_sram;
 
-axi_cdc_wrapper #(
-    .USE_CDC(1)
-) u_axi_cdc_wrapper (
-    .s_axi_aclk    (clk_cpu),
-    .s_axi_aresetn (cpu_resetn),
-    .s_axi_arid    (arid_cpu),
-    .s_axi_araddr  (araddr_cpu),
-    .s_axi_arlen   (arlen_cpu),
-    .s_axi_arsize  (arsize_cpu),
-    .s_axi_arburst (arburst_cpu),
-    .s_axi_arlock  (arlock_cpu),
-    .s_axi_arcache (arcache_cpu),
-    .s_axi_arprot  (arprot_cpu),
-    .s_axi_arvalid (arvalid_cpu),
-    .s_axi_arready (arready_cpu),
-    .s_axi_rid     (rid_cpu),
-    .s_axi_rdata   (rdata_cpu),
-    .s_axi_rresp   (rresp_cpu),
-    .s_axi_rlast   (rlast_cpu),
-    .s_axi_rvalid  (rvalid_cpu),
-    .s_axi_rready  (rready_cpu),
-    .s_axi_awid    (awid_cpu),
-    .s_axi_awaddr  (awaddr_cpu),
-    .s_axi_awlen   (awlen_cpu),
-    .s_axi_awsize  (awsize_cpu),
-    .s_axi_awburst (awburst_cpu),
-    .s_axi_awlock  (awlock_cpu),
-    .s_axi_awcache (awcache_cpu),
-    .s_axi_awprot  (awprot_cpu),
-    .s_axi_awvalid (awvalid_cpu),
-    .s_axi_awready (awready_cpu),
-    .s_axi_wdata   (wdata_cpu),
-    .s_axi_wstrb   (wstrb_cpu),
-    .s_axi_wlast   (wlast_cpu),
-    .s_axi_wvalid  (wvalid_cpu),
-    .s_axi_wready  (wready_cpu),
-    .s_axi_bid     (bid_cpu),
-    .s_axi_bresp   (bresp_cpu),
-    .s_axi_bvalid  (bvalid_cpu),
-    .s_axi_bready  (bready_cpu),
+assign arid_sram    = arid_cpu;
+assign araddr_sram  = araddr_cpu;
+assign arlen_sram   = arlen_cpu;
+assign arsize_sram  = arsize_cpu;
+assign arburst_sram = arburst_cpu;
+assign arlock_sram  = arlock_cpu;
+assign arcache_sram = arcache_cpu;
+assign arprot_sram  = arprot_cpu;
+assign arvalid_sram = arvalid_cpu;
+assign arready_cpu  = arready_sram;
 
-    .m_axi_aclk    (clk_sram),
-    .m_axi_aresetn (sram_resetn),
-    .m_axi_arid    (arid_sram),
-    .m_axi_araddr  (araddr_sram),
-    .m_axi_arlen   (arlen_sram),
-    .m_axi_arsize  (arsize_sram),
-    .m_axi_arburst (arburst_sram),
-    .m_axi_arlock  (arlock_sram),
-    .m_axi_arcache (arcache_sram),
-    .m_axi_arprot  (arprot_sram),
-    .m_axi_arvalid (arvalid_sram),
-    .m_axi_arready (arready_sram),
-    .m_axi_rid     (rid_sram),
-    .m_axi_rdata   (rdata_sram),
-    .m_axi_rresp   (rresp_sram),
-    .m_axi_rlast   (rlast_sram),
-    .m_axi_rvalid  (rvalid_sram),
-    .m_axi_rready  (rready_sram),
-    .m_axi_awid    (awid_sram),
-    .m_axi_awaddr  (awaddr_sram),
-    .m_axi_awlen   (awlen_sram),
-    .m_axi_awsize  (awsize_sram),
-    .m_axi_awburst (awburst_sram),
-    .m_axi_awlock  (awlock_sram),
-    .m_axi_awcache (awcache_sram),
-    .m_axi_awprot  (awprot_sram),
-    .m_axi_awvalid (awvalid_sram),
-    .m_axi_awready (awready_sram),
-    .m_axi_wdata   (wdata_sram),
-    .m_axi_wstrb   (wstrb_sram),
-    .m_axi_wlast   (wlast_sram),
-    .m_axi_wvalid  (wvalid_sram),
-    .m_axi_wready  (wready_sram),
-    .m_axi_bid     (bid_sram),
-    .m_axi_bresp   (bresp_sram),
-    .m_axi_bvalid  (bvalid_sram),
-    .m_axi_bready  (bready_sram)
-);
+assign rid_cpu      = rid_sram;
+assign rdata_cpu    = rdata_sram;
+assign rresp_cpu    = rresp_sram;
+assign rlast_cpu    = rlast_sram;
+assign rvalid_cpu   = rvalid_sram;
+assign rready_sram  = rready_cpu;
+
+assign awid_sram    = awid_cpu;
+assign awaddr_sram  = awaddr_cpu;
+assign awlen_sram   = awlen_cpu;
+assign awsize_sram  = awsize_cpu;
+assign awburst_sram = awburst_cpu;
+assign awlock_sram  = awlock_cpu;
+assign awcache_sram = awcache_cpu;
+assign awprot_sram  = awprot_cpu;
+assign awvalid_sram = awvalid_cpu;
+assign awready_cpu  = awready_sram;
+
+assign wdata_sram   = wdata_cpu;
+assign wstrb_sram   = wstrb_cpu;
+assign wlast_sram   = wlast_cpu;
+assign wvalid_sram  = wvalid_cpu;
+assign wready_cpu   = wready_sram;
+
+assign bid_cpu      = bid_sram;
+assign bresp_cpu    = bresp_sram;
+assign bvalid_cpu   = bvalid_sram;
+assign bready_sram  = bready_cpu;
 
 wire [7:0] ext_uart_rx;
 reg  [7:0] ext_uart_buffer;
@@ -241,7 +172,7 @@ reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_r (
     .clk(clk_sram),
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
@@ -250,7 +181,7 @@ async_receiver #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_r (
 );
 
 assign ext_uart_clear = ext_uart_ready;
-async_transmitter #(.ClkFrequency(50000000), .Baud(115200)) ext_uart_t (
+async_transmitter #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_t (
     .clk(clk_sram),
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
@@ -262,6 +193,7 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
+localparam [1:0] SRAM_WAIT_CYCLES = 2'd2;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
@@ -291,31 +223,51 @@ reg [3:0]  rid_reg;
 reg [7:0]  rlen_reg;
 reg [1:0]  rburst_reg;
 reg [7:0]  rbeat_cnt;
+reg [1:0]  rwait_cnt;
 
-assign arready_sram = is_read && !rvalid_reg;
-wire read_fire = arvalid_sram && arready_sram;
+assign arready_sram = (slave_state == S_IDLE);
+wire read_fire = (slave_state == S_IDLE) && arvalid_sram;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
-        rvalid_reg <= 0;
-        rbeat_cnt  <= 0;
+        rvalid_reg <= 1'b0;
+        raddr_reg  <= 32'd0;
+        rid_reg    <= 4'd0;
+        rlen_reg   <= 8'd0;
+        rburst_reg <= 2'd0;
+        rbeat_cnt  <= 8'd0;
+        rwait_cnt  <= 2'd0;
     end else if (read_fire) begin
-        rvalid_reg <= 1;
+        rvalid_reg <= 1'b0;
         raddr_reg  <= araddr_sram;
         rid_reg    <= arid_sram;
         rlen_reg   <= arlen_sram;
         rburst_reg <= arburst_sram;
         rbeat_cnt  <= 8'd0;
-    end else if (rvalid_sram && rready_sram) begin
-        if (rbeat_cnt == rlen_reg) begin
-            rvalid_reg <= 0;
-        end else begin
-            rbeat_cnt <= rbeat_cnt + 8'd1;
-            if (rburst_reg == 2'b10) begin
-                raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
+        rwait_cnt  <= 2'd0;
+    end else if (slave_state == S_READ) begin
+        if (!rvalid_reg) begin
+            if (rwait_cnt >= SRAM_WAIT_CYCLES) begin
+                rvalid_reg <= 1'b1;
             end else begin
-                raddr_reg <= raddr_reg + 32'd4;
+                rwait_cnt <= rwait_cnt + 2'd1;
             end
+        end else if (rready_sram) begin
+            if (rbeat_cnt == rlen_reg) begin
+                rvalid_reg <= 1'b0;
+                rwait_cnt  <= 2'd0;
+            end else begin
+                rvalid_reg <= 1'b0;
+                rwait_cnt  <= 2'd0;
+                rbeat_cnt  <= rbeat_cnt + 8'd1;
+                if (rburst_reg == 2'b10) begin
+                    raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
+                end else begin
+                    raddr_reg <= raddr_reg + 32'd4;
+                end
+            end
+        end else begin
+            rwait_cnt <= rwait_cnt;
         end
     end
 end
@@ -325,7 +277,7 @@ assign rlast_sram  = (rbeat_cnt == rlen_reg);
 assign rresp_sram  = 2'b0;
 assign rid_sram    = rid_reg;
 
-wire [31:0] current_raddr = read_fire ? araddr_sram : raddr_reg;
+wire [31:0] current_raddr = raddr_reg;
 
 reg aw_recvd, w_recvd;
 reg [31:0] awaddr_reg;
@@ -333,6 +285,7 @@ reg [31:0] wdata_reg;
 reg [ 3:0] wstrb_reg;
 reg [ 3:0] bid_reg;
 reg bvalid_reg;
+reg [1:0]  wwait_cnt;
 
 assign awready_sram = is_write && !aw_recvd && !bvalid_reg;
 assign wready_sram  = is_write && !w_recvd  && !bvalid_reg;
@@ -341,29 +294,42 @@ wire w_fire  = wvalid_sram && wready_sram;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
-        aw_recvd <= 0;
-        w_recvd <= 0;
-        bvalid_reg <= 0;
+        aw_recvd  <= 1'b0;
+        w_recvd   <= 1'b0;
+        awaddr_reg<= 32'd0;
+        wdata_reg <= 32'd0;
+        wstrb_reg <= 4'd0;
+        bid_reg   <= 4'd0;
+        bvalid_reg<= 1'b0;
+        wwait_cnt <= 2'd0;
     end else begin
         if (bvalid_sram && bready_sram) begin
-            bvalid_reg <= 0;
+            bvalid_reg <= 1'b0;
+            aw_recvd   <= 1'b0;
+            w_recvd    <= 1'b0;
+            wwait_cnt  <= 2'd0;
         end
 
         if (aw_fire) begin
-            aw_recvd <= 1;
+            aw_recvd <= 1'b1;
             awaddr_reg <= awaddr_sram;
             bid_reg <= awid_sram;
         end
         if (w_fire) begin
-            w_recvd <= 1;
+            w_recvd <= 1'b1;
             wdata_reg <= wdata_sram;
             wstrb_reg <= wstrb_sram;
         end
 
-        if ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg) begin
-            bvalid_reg <= 1;
-            aw_recvd <= 0;
-            w_recvd <= 0;
+        if (slave_state == S_WRITE && aw_recvd && w_recvd && !bvalid_reg) begin
+            if (wwait_cnt >= SRAM_WAIT_CYCLES) begin
+                bvalid_reg <= 1'b1;
+                wwait_cnt  <= 2'd0;
+            end else begin
+                wwait_cnt <= wwait_cnt + 2'd1;
+            end
+        end else if (!(aw_recvd && w_recvd) && !bvalid_reg) begin
+            wwait_cnt <= 2'd0;
         end
     end
 end
@@ -372,14 +338,15 @@ assign bvalid_sram = bvalid_reg;
 assign bresp_sram  = 2'b0;
 assign bid_sram    = bid_reg;
 
-wire do_write = ((aw_recvd || aw_fire) && (w_recvd || w_fire) && !bvalid_reg);
-wire [31:0] current_waddr = aw_fire ? awaddr_sram : awaddr_reg;
-wire [31:0] current_wdata = w_fire ? wdata_sram : wdata_reg;
-wire [ 3:0] current_wstrb = w_fire ? wstrb_sram : wstrb_reg;
+wire do_write = (slave_state == S_WRITE) && aw_recvd && w_recvd && !bvalid_reg;
+wire write_commit = do_write && (wwait_cnt >= SRAM_WAIT_CYCLES);
+wire [31:0] current_waddr = awaddr_reg;
+wire [31:0] current_wdata = wdata_reg;
+wire [ 3:0] current_wstrb = wstrb_reg;
 
 wire [31:0] mem_addr = do_write ? current_waddr : current_raddr;
 wire        mem_we   = do_write;
-wire        mem_re   = rvalid_reg;
+wire        mem_re   = (slave_state == S_READ);
 
 wire is_base = (mem_addr[31:22] == 10'h070);
 wire is_ext  = (mem_addr[31:22] == 10'h071);
@@ -401,70 +368,19 @@ wire [19:0] soft_ext_addr = mem_addr[21:2];
 wire [31:0] soft_ext_dout = current_wdata;
 wire        soft_ext_doe  = (is_ext && mem_we);
 
-wire        mux_base_ce_n, mux_base_oe_n, mux_base_we_n, mux_base_doe;
-wire [3:0]  mux_base_be_n;
-wire [19:0] mux_base_addr;
-wire [31:0] mux_base_dout;
-wire        mux_ext_ce_n, mux_ext_oe_n, mux_ext_we_n, mux_ext_doe;
-wire [3:0]  mux_ext_be_n;
-wire [19:0] mux_ext_addr;
-wire [31:0] mux_ext_dout;
+assign base_ram_ce_n = soft_base_ce_n;
+assign base_ram_we_n = soft_base_we_n;
+assign base_ram_oe_n = soft_base_oe_n;
+assign base_ram_be_n = soft_base_be_n;
+assign base_ram_addr = soft_base_addr;
+assign base_ram_data = soft_base_doe ? soft_base_dout : 32'bz;
 
-
-la_mem_pipe u_mem_pipe (
-    .clk(clk_sram), .resetn(sram_resetn),
-    .pipe_go(pipe_go), .pipe_idx(pipe_idx),
-    .pipe_busy(pipe_busy_s), .pipe_done(pipe_done_s), .pipe_giveup(pipe_giveup_s),
-    .pipe_retarget_pc(pipe_retarget_pc_s), .pipe_port_sel(pipe_port_sel),
-    .pipe_base_ce_n(pipe_base_ce_n), .pipe_base_oe_n(pipe_base_oe_n),
-    .pipe_base_we_n(pipe_base_we_n), .pipe_base_be_n(pipe_base_be_n),
-    .pipe_base_addr(pipe_base_addr), .pipe_base_dout(pipe_base_dout),
-    .pipe_base_doe(pipe_base_doe), .base_data_in(base_ram_data),
-    .pipe_ext_ce_n(pipe_ext_ce_n), .pipe_ext_oe_n(pipe_ext_oe_n),
-    .pipe_ext_we_n(pipe_ext_we_n), .pipe_ext_be_n(pipe_ext_be_n),
-    .pipe_ext_addr(pipe_ext_addr), .pipe_ext_dout(pipe_ext_dout),
-    .pipe_ext_doe(pipe_ext_doe), .ext_data_in(ext_ram_data)
-);
-
-la_bank_mux u_bank_mux (
-    .pipe_port_sel(pipe_port_sel),
-    .soft_base_ce_n(soft_base_ce_n), .soft_base_oe_n(soft_base_oe_n),
-    .soft_base_we_n(soft_base_we_n), .soft_base_be_n(soft_base_be_n),
-    .soft_base_addr(soft_base_addr), .soft_base_dout(soft_base_dout),
-    .soft_base_doe(soft_base_doe),
-    .soft_ext_ce_n(soft_ext_ce_n), .soft_ext_oe_n(soft_ext_oe_n),
-    .soft_ext_we_n(soft_ext_we_n), .soft_ext_be_n(soft_ext_be_n),
-    .soft_ext_addr(soft_ext_addr), .soft_ext_dout(soft_ext_dout),
-    .soft_ext_doe(soft_ext_doe),
-    .pipe_base_ce_n(pipe_base_ce_n), .pipe_base_oe_n(pipe_base_oe_n),
-    .pipe_base_we_n(pipe_base_we_n), .pipe_base_be_n(pipe_base_be_n),
-    .pipe_base_addr(pipe_base_addr), .pipe_base_dout(pipe_base_dout),
-    .pipe_base_doe(pipe_base_doe),
-    .pipe_ext_ce_n(pipe_ext_ce_n), .pipe_ext_oe_n(pipe_ext_oe_n),
-    .pipe_ext_we_n(pipe_ext_we_n), .pipe_ext_be_n(pipe_ext_be_n),
-    .pipe_ext_addr(pipe_ext_addr), .pipe_ext_dout(pipe_ext_dout),
-    .pipe_ext_doe(pipe_ext_doe),
-    .base_ce_n(mux_base_ce_n), .base_oe_n(mux_base_oe_n), .base_we_n(mux_base_we_n),
-    .base_be_n(mux_base_be_n), .base_addr(mux_base_addr),
-    .base_data_out(mux_base_dout), .base_data_oe(mux_base_doe),
-    .ext_ce_n(mux_ext_ce_n), .ext_oe_n(mux_ext_oe_n), .ext_we_n(mux_ext_we_n),
-    .ext_be_n(mux_ext_be_n), .ext_addr(mux_ext_addr),
-    .ext_data_out(mux_ext_dout), .ext_data_oe(mux_ext_doe)
-);
-
-assign base_ram_ce_n = mux_base_ce_n;
-assign base_ram_we_n = mux_base_we_n;
-assign base_ram_oe_n = mux_base_oe_n;
-assign base_ram_be_n = mux_base_be_n;
-assign base_ram_addr = mux_base_addr;
-assign base_ram_data = mux_base_doe ? mux_base_dout : 32'bz;
-
-assign ext_ram_ce_n  = mux_ext_ce_n;
-assign ext_ram_we_n  = mux_ext_we_n;
-assign ext_ram_oe_n  = mux_ext_oe_n;
-assign ext_ram_be_n  = mux_ext_be_n;
-assign ext_ram_addr  = mux_ext_addr;
-assign ext_ram_data  = mux_ext_doe ? mux_ext_dout : 32'bz;
+assign ext_ram_ce_n  = soft_ext_ce_n;
+assign ext_ram_we_n  = soft_ext_we_n;
+assign ext_ram_oe_n  = soft_ext_oe_n;
+assign ext_ram_be_n  = soft_ext_be_n;
+assign ext_ram_addr  = soft_ext_addr;
+assign ext_ram_data  = soft_ext_doe ? soft_ext_dout : 32'bz;
 
 reg uart_dlab;
 
@@ -474,11 +390,11 @@ always @(posedge clk_sram) begin
         ext_uart_tx    <= 0;
         uart_dlab      <= 0;
     end else begin
-        if (is_uart && do_write && mem_addr[7:0] == 8'h03) begin
+        if (is_uart && write_commit && mem_addr[7:0] == 8'h03) begin
             uart_dlab <= current_wdata[7];
         end
 
-        if (is_uart && do_write && mem_addr[7:0] == 8'h00 && !uart_dlab) begin
+        if (is_uart && write_commit && mem_addr[7:0] == 8'h00 && !uart_dlab) begin
             ext_uart_tx    <= current_wdata[7:0];
             ext_uart_start <= 1;
         end else begin

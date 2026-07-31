@@ -26,9 +26,6 @@ module write_buffer #(
 
     output wire        wb_empty
 );
-    // Board-proven soft path: any pending store blocks all loads.
-    // (CAM conflict was an optimization; WaitBoot regressions force restore.)
-
     reg [31:0] buf_addr  [0:DEPTH-1];
     reg [31:0] buf_wdata [0:DEPTH-1];
     reg [ 3:0] buf_wstrb [0:DEPTH-1];
@@ -43,10 +40,37 @@ module write_buffer #(
     wire buf_empty = (count == 3'd0);
     assign wb_empty = buf_empty;
 
-    wire has_conflict = !buf_empty;
-
     wire load_req  = cpu_req && !cpu_wr;
     wire store_req = cpu_req && cpu_wr;
+
+    function is_mmio_addr;
+        input [31:0] addr;
+        begin
+            is_mmio_addr = (addr[31:20] == 12'h1f0);
+        end
+    endfunction
+
+    function same_word_addr;
+        input [31:0] addr_a;
+        input [31:0] addr_b;
+        begin
+            same_word_addr = (addr_a[31:2] == addr_b[31:2]);
+        end
+    endfunction
+
+    reg has_conflict;
+    integer conflict_i;
+    always @(*) begin
+        has_conflict = 1'b0;
+        if (load_req) begin
+            for (conflict_i = 0; conflict_i < DEPTH; conflict_i = conflict_i + 1) begin
+                if (buf_valid[conflict_i]) begin
+                    if (is_mmio_addr(cpu_addr) || is_mmio_addr(buf_addr[conflict_i]) || same_word_addr(cpu_addr, buf_addr[conflict_i]))
+                        has_conflict = 1'b1;
+                end
+            end
+        end
+    end
 
     wire load_ready_to_go  = load_req && !has_conflict;
     wire store_ready_to_go = !buf_empty;

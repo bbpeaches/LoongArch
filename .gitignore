@@ -5,3 +5,6 @@ readcbor.py
 *.cbor
 trace_readable.json
 .agents/
+vivado_check/
+.Xil/
+.codex_vivado_check.tcl
