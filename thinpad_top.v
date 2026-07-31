@@ -145,7 +145,8 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
-localparam [1:0] SRAM_WAIT_CYCLES = 2'd2;
+localparam [1:0] READ_WAIT_CYCLES  = 2'd1;
+localparam [1:0] WRITE_WAIT_CYCLES = 2'd1;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
@@ -199,7 +200,7 @@ always @(posedge clk_sram) begin
         rwait_cnt  <= 2'd0;
     end else if (slave_state == S_READ) begin
         if (!rvalid_reg) begin
-            if (rwait_cnt >= SRAM_WAIT_CYCLES) begin
+            if (rwait_cnt >= READ_WAIT_CYCLES) begin
                 rvalid_reg <= 1'b1;
             end else begin
                 rwait_cnt <= rwait_cnt + 2'd1;
@@ -274,7 +275,7 @@ always @(posedge clk_sram) begin
         end
 
         if (slave_state == S_WRITE && aw_recvd && w_recvd && !bvalid_reg) begin
-            if (wwait_cnt >= SRAM_WAIT_CYCLES) begin
+            if (wwait_cnt >= WRITE_WAIT_CYCLES) begin
                 bvalid_reg <= 1'b1;
                 wwait_cnt  <= 2'd0;
             end else begin
@@ -291,7 +292,7 @@ assign bresp_sram  = 2'b0;
 assign bid_sram    = bid_reg;
 
 wire do_write = (slave_state == S_WRITE) && aw_recvd && w_recvd && !bvalid_reg;
-wire write_commit = do_write && (wwait_cnt >= SRAM_WAIT_CYCLES);
+wire write_commit = do_write && (wwait_cnt >= WRITE_WAIT_CYCLES);
 wire [31:0] current_waddr = awaddr_reg;
 wire [31:0] current_wdata = wdata_reg;
 wire [ 3:0] current_wstrb = wstrb_reg;
