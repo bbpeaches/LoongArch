@@ -12,3 +12,4 @@ trace_readable.json
 *.jou
 prompt.md
 tb/
+*.pb
