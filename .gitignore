@@ -11,6 +11,7 @@ trace_readable.json
 *.log
 *.jou
 prompt.md
+prompt2.md
 tb/
 *.pb
 *.rpt
