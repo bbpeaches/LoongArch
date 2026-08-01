@@ -13,3 +13,4 @@ trace_readable.json
 prompt.md
 tb/
 *.pb
+*.rpt
