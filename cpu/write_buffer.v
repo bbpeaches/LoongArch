@@ -53,21 +53,23 @@ module write_buffer #(
     function same_word_addr;
         input [31:0] addr_a;
         input [31:0] addr_b;
-        reg [9:0] word_addr_match;
+        reg [5:0] word_addr_match;
         begin
-            // A three-bit slice equality fits one LUT6.  Reducing the ten
-            // independent slices avoids a single 30-bit comparator carry
-            // chain while preserving the exact word-address comparison.
+            // This is a conservative load-after-store conflict filter.  A
+            // true word match always matches every slice below, so no stale
+            // read can pass a buffered write.  Non-identical words may very
+            // rarely share this 18-bit fingerprint; that only postpones an
+            // otherwise independent load until the older store completes.
+            // Six 3-bit comparisons and one LUT6 reduction save one logic
+            // level versus the exact 30-bit CAM comparison on the EX-address
+            // path, while retaining enough address-region bits to avoid
+            // systematic BaseRAM/ExtRAM streaming aliases.
             word_addr_match[0] = (addr_a[ 4: 2] == addr_b[ 4: 2]);
             word_addr_match[1] = (addr_a[ 7: 5] == addr_b[ 7: 5]);
             word_addr_match[2] = (addr_a[10: 8] == addr_b[10: 8]);
-            word_addr_match[3] = (addr_a[13:11] == addr_b[13:11]);
-            word_addr_match[4] = (addr_a[16:14] == addr_b[16:14]);
-            word_addr_match[5] = (addr_a[19:17] == addr_b[19:17]);
-            word_addr_match[6] = (addr_a[22:20] == addr_b[22:20]);
-            word_addr_match[7] = (addr_a[25:23] == addr_b[25:23]);
-            word_addr_match[8] = (addr_a[28:26] == addr_b[28:26]);
-            word_addr_match[9] = (addr_a[31:29] == addr_b[31:29]);
+            word_addr_match[3] = (addr_a[17:15] == addr_b[17:15]);
+            word_addr_match[4] = (addr_a[20:18] == addr_b[20:18]);
+            word_addr_match[5] = (addr_a[23:21] == addr_b[23:21]);
             same_word_addr = &word_addr_match;
         end
     endfunction
@@ -142,7 +144,17 @@ module write_buffer #(
     end
 
     wire req_load_active  = (state == S_IDLE && load_ready_to_go) || (state == S_DO_LOAD);
-    wire req_store_active = (state == S_IDLE && !load_ready_to_go && store_ready_to_go) || (state == S_DO_STORE);
+
+    // A queued store normally starts directly from idle.  When an incoming
+    // load aliases a buffered store, however, it used to make the load CAM,
+    // the store-launch muxes, and the AXI write capture all one combinational
+    // path.  First enter S_DO_STORE for that collision case instead.  It does
+    // not alter ordering or any non-conflicting request: a CPU store (or an
+    // idle cycle) still launches the queued store immediately, while an
+    // aliased load was already required to wait for that store to complete.
+    wire idle_store_without_load = (state == S_IDLE) &&
+                                  store_ready_to_go && !load_req;
+    wire req_store_active = idle_store_without_load || (state == S_DO_STORE);
 
     assign mem_req   = (req_load_active || req_store_active) && !mem_addr_rcv;
     assign mem_wr    = req_store_active;

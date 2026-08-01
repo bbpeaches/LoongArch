@@ -8,27 +8,28 @@ module mul_top (
     output wire [31:0] result,
     output wire        result_valid
 );
-    // Keep this shift register in lockstep with the configured Mult Gen
-    // latency.  The IP has C_LATENCY = 2.  It has no reset input, so the
-    // valid pipeline also prevents pre-reset contents from being observed.
+    // The CPU observes a product two clocks after issue.  Registering the
+    // operands first and the complete product next preserves that contract
+    // while keeping a load-forwarded operand out of the DSP input setup path.
     reg [1:0] valid_pipe;
+    reg signed [31:0] operand_a_pipe;
+    reg signed [31:0] operand_b_pipe;
+    (* use_dsp = "yes" *) reg signed [63:0] product_pipe;
 
     always @(posedge clk) begin
         if (~resetn) begin
-            valid_pipe <= 2'b00;
+            valid_pipe    <= 2'b00;
+            operand_a_pipe <= 32'sd0;
+            operand_b_pipe <= 32'sd0;
+            product_pipe   <= 64'sd0;
         end else if (ce) begin
-            valid_pipe <= {valid_pipe[0], issue_valid};
+            operand_a_pipe <= x;
+            operand_b_pipe <= y;
+            product_pipe   <= operand_a_pipe * operand_b_pipe;
+            valid_pipe     <= {valid_pipe[0], issue_valid};
         end
     end
 
-    wire [63:0] mult_result_full;
-    mult_gen_0 u_mult (
-        .CLK (clk),
-        .CE  (ce),    
-        .A   (x),
-        .B   (y),
-        .P   (mult_result_full)
-    );
-    assign result = mult_result_full[31:0];
+    assign result = product_pipe[31:0];
     assign result_valid = valid_pipe[1];
 endmodule
