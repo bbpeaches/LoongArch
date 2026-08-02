@@ -30,6 +30,8 @@ module id_ctrl_gen (
     input  wire inst_jirl,
     input  wire inst_cpucfg,
     input  wire inst_ld_bu,
+    input  wire inst_csr,
+    input  wire inst_cacop,
 
     output wire        rf_we,         
     output wire        use_imm,       
@@ -49,14 +51,14 @@ module id_ctrl_gen (
                    inst_ld_w  | inst_lu12i_w |
                    inst_pcaddu12i | inst_slt | inst_or | inst_xor | inst_andi | inst_xori |
                    inst_sll_w | inst_srl_w | inst_sra_w | inst_srli_w | inst_ld_b | inst_ld_bu | inst_bl | inst_jirl | inst_cpucfg |
-                   inst_sltu | inst_nor | inst_srai_w;
+                   inst_sltu | inst_nor | inst_srai_w | inst_csr;
 
     assign use_imm = inst_slli_w | inst_srli_w | inst_srai_w | inst_slti | inst_sltui | inst_addi_w |
                      inst_ori | inst_andi | inst_xori | inst_ld_w | inst_ld_b | inst_ld_bu |
                      inst_st_w | inst_st_b | inst_lu12i_w | inst_pcaddu12i | inst_cpucfg | 
-                     inst_jirl;
+                     inst_jirl | inst_cacop;
 
-    assign alu_op[0]  = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w | inst_ld_b | inst_ld_bu | inst_st_b | inst_pcaddu12i;
+    assign alu_op[0]  = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w | inst_ld_b | inst_ld_bu | inst_st_b | inst_pcaddu12i | inst_cacop;
     assign alu_op[1]  = inst_sub_w;
     assign alu_op[2]  = inst_slti | inst_slt;
     assign alu_op[3]  = inst_sltu | inst_sltui;

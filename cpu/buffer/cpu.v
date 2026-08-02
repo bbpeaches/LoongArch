@@ -11,6 +11,10 @@ module cpu(
     input  wire        inst_sram_addr_ok,
     input  wire        inst_sram_data_ok,
     input  wire [31:0] inst_sram_rdata,
+    output wire        icache_cacop_valid,
+    output wire [ 4:0] icache_cacop_code,
+    output wire [31:0] icache_cacop_addr,
+    input  wire        icache_cacop_busy,
     
     output wire        data_sram_req,
     output wire        data_sram_wr,
@@ -35,20 +39,42 @@ module cpu(
     wire         inst_sram_wait;
     wire         fetch_issue_valid;
     wire         fetch_pc_stall;
+    wire         internal_data_en;
+    wire [ 3:0]  internal_data_wen;
+    wire [31:0]  internal_data_addr;
+    wire [31:0]  internal_data_wdata;
 
     assign inst_sram_req   = internal_inst_en & fetch_issue_valid;
     assign inst_sram_wr    = 1'b0;       
     assign inst_sram_size  = 2'b10;      
     assign inst_sram_wstrb = 4'b0000;
-    assign inst_sram_addr  = internal_inst_addr;
+    // DMW translation is deliberately kept off the fetch/data timing cones
+    // unless PG is active.  Unmapped paged addresses have no TLB support in
+    // this minimal core and therefore retain their identity physical address.
+    wire [31:0] csr_crmd, csr_dmw0, csr_dmw1;
+    wire paged_mode = csr_crmd[4] && !csr_crmd[3];
+    wire dmw0_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw0[0]) ||
+                           ((csr_crmd[1:0] == 2'd3) && csr_dmw0[3]);
+    wire dmw1_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw1[0]) ||
+                           ((csr_crmd[1:0] == 2'd3) && csr_dmw1[3]);
+    wire inst_dmw0_match = paged_mode && dmw0_plv_enable && (internal_inst_addr[31:29] == csr_dmw0[31:29]);
+    wire inst_dmw1_match = paged_mode && dmw1_plv_enable && (internal_inst_addr[31:29] == csr_dmw1[31:29]);
+    wire data_dmw0_match = paged_mode && dmw0_plv_enable && (internal_data_addr[31:29] == csr_dmw0[31:29]);
+    wire data_dmw1_match = paged_mode && dmw1_plv_enable && (internal_data_addr[31:29] == csr_dmw1[31:29]);
+    // A DMW preserves VA[28:0], so keep the cache index/offset path as a
+    // direct wire and select only the physical segment bits.
+    wire [2:0] internal_inst_pseg = inst_dmw0_match ? csr_dmw0[27:25] :
+                                      inst_dmw1_match ? csr_dmw1[27:25] : internal_inst_addr[31:29];
+    wire [2:0] internal_data_pseg = data_dmw0_match ? csr_dmw0[27:25] :
+                                      data_dmw1_match ? csr_dmw1[27:25] : internal_data_addr[31:29];
+    wire [31:0] internal_inst_paddr = {internal_inst_pseg, internal_inst_addr[28:0]};
+    wire [31:0] internal_data_paddr = {internal_data_pseg, internal_data_addr[28:0]};
+
+    assign inst_sram_addr  = internal_inst_paddr;
     assign inst_sram_wdata = 32'd0;
 
     assign inst_sram_wait  = fetch_pc_stall;
 
-    wire         internal_data_en;
-    wire [ 3:0] internal_data_wen;
-    wire [31:0] internal_data_addr;
-    wire [31:0] internal_data_wdata;
     wire         mem_wait;
     wire         data_mem_wait;
     wire         mul_mem_wait;
@@ -76,11 +102,11 @@ module cpu(
                              2'b10; 
 
     assign data_sram_wstrb = is_data_write ? internal_data_wen : 4'b0000;
-    assign data_sram_addr  = internal_data_addr;
+    assign data_sram_addr  = internal_data_paddr;
     assign data_sram_wdata = internal_data_wdata;
 
     assign data_mem_wait = internal_data_en & ~data_sram_data_ok;
-    assign mem_wait      = data_mem_wait | mul_mem_wait;
+    assign mem_wait      = data_mem_wait | mul_mem_wait | icache_cacop_busy;
 
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
@@ -287,7 +313,11 @@ module cpu(
     wire [31:0] wb_data, ex_result, mem_final_data;
 
     wire         id_rf_we, id_mem_en, id_is_st_w, id_is_st_b, id_is_ld_b, id_is_ld_bu, id_is_branch;
+    wire         id_is_cpucfg, id_is_cacop;
     wire [ 1:0] id_wb_sel;
+    wire [ 1:0] id_csr_op;
+    wire [13:0] id_csr_num;
+    wire [ 4:0] id_cacop_code;
     wire [ 4:0] id_waddr, id_rs1, id_rs2;
     wire [11:0] id_alu_op; 
     wire [31:0] id_alu_src1, id_alu_src2, id_rdata2;
@@ -333,6 +363,8 @@ module cpu(
         .id_rf_we(id_rf_we), .id_waddr(id_waddr), .id_wb_sel(id_wb_sel),
         .id_mem_en(id_mem_en), .id_is_st_w(id_is_st_w), .id_is_st_b(id_is_st_b), .id_is_ld_b(id_is_ld_b),
         .id_is_ld_bu(id_is_ld_bu),
+        .id_is_cpucfg(id_is_cpucfg), .id_csr_op(id_csr_op), .id_csr_num(id_csr_num),
+        .id_is_cacop(id_is_cacop), .id_cacop_code(id_cacop_code),
         .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
         .id_rs1(id_rs1), .id_rs2(id_rs2),
         
@@ -343,6 +375,10 @@ module cpu(
     wire [31:0] ex_pc, ex_alu_src1, ex_alu_src2, ex_rdata2;
     wire [ 1:0] ex_wb_sel;
     wire         ex_mem_en, ex_is_ld_b, ex_is_ld_bu;
+    wire         ex_is_cpucfg, ex_is_cacop;
+    wire [ 1:0] ex_csr_op;
+    wire [13:0] ex_csr_num;
+    wire [ 4:0] ex_cacop_code;
     wire [11:0] ex_alu_op;  
     
     wire [11:0] ex_br_info;
@@ -357,6 +393,8 @@ module cpu(
         .id_pc(id_pc), .id_rf_we(id_rf_we), .id_waddr(id_waddr), .id_wb_sel(id_wb_sel),
         .id_mem_en(id_mem_en), .id_is_st_w(id_is_st_w), .id_is_st_b(id_is_st_b), .id_is_ld_b(id_is_ld_b),
         .id_is_ld_bu(id_is_ld_bu),
+        .id_is_cpucfg(id_is_cpucfg), .id_csr_op(id_csr_op), .id_csr_num(id_csr_num),
+        .id_is_cacop(id_is_cacop), .id_cacop_code(id_cacop_code),
         .id_alu_op(id_alu_op), .id_alu_src1(id_alu_src1), .id_alu_src2(id_alu_src2), .id_rdata2(id_rdata2),
         
         .id_rs2(id_rs2),  
@@ -368,6 +406,8 @@ module cpu(
         .ex_pc(ex_pc), .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
         .ex_mem_en(ex_mem_en), .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_is_ld_b(ex_is_ld_b),
         .ex_is_ld_bu(ex_is_ld_bu), 
+        .ex_is_cpucfg(ex_is_cpucfg), .ex_csr_op(ex_csr_op), .ex_csr_num(ex_csr_num),
+        .ex_is_cacop(ex_is_cacop), .ex_cacop_code(ex_cacop_code),
         .ex_alu_op(ex_alu_op), .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
         
         .ex_rs2(ex_rs2),  
@@ -386,6 +426,9 @@ module cpu(
     wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
     wire [ 1:0] ex_addr_align;
     wire         ex_mem_read;
+    wire         csr_we;
+    wire [13:0]  csr_waddr;
+    wire [31:0]  csr_wdata, csr_wmask, csr_rdata;
     wire         ex_is_mul = (ex_wb_sel == 2'b10);
     assign ex_fw_valid = !ex_is_mul && !ex_mem_read;
 
@@ -397,6 +440,8 @@ module cpu(
         .ex_pc(ex_pc), .ex_wb_sel(ex_wb_sel), .ex_mem_en(ex_mem_en),
         .ex_is_st_w(ex_is_st_w), .ex_is_st_b(ex_is_st_b), .ex_alu_op(ex_alu_op),
         .ex_alu_src1(ex_alu_src1), .ex_alu_src2(ex_alu_src2), .ex_rdata2(ex_rdata2),
+        .ex_is_cpucfg(ex_is_cpucfg), .ex_csr_op(ex_csr_op), .ex_csr_num(ex_csr_num), .csr_rdata(csr_rdata),
+        .ex_is_cacop(ex_is_cacop), .ex_cacop_code(ex_cacop_code),
         .ex_rs2(ex_rs2),
         .mem_is_load(mem_is_load),
         .mem_waddr(mem_waddr),
@@ -411,11 +456,20 @@ module cpu(
         .data_sram_addr(internal_data_addr),   
         .data_sram_wdata(internal_data_wdata), 
         .ex_mem_read(ex_mem_read),
+        .csr_we(csr_we), .csr_waddr(csr_waddr), .csr_wdata(csr_wdata), .csr_wmask(csr_wmask),
+        .ex_cacop_valid(icache_cacop_valid), .ex_cacop_code_out(icache_cacop_code), .ex_cacop_addr(icache_cacop_addr),
         
         .ex_br_taken(ex_br_taken), .ex_br_target(ex_br_target),
         .upd_bpu_en(upd_bpu_en), .upd_bpu_pc(upd_bpu_pc), .upd_bpu_ghr(upd_bpu_ghr),
         .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_pred_taken(upd_bpu_pred_taken),
         .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
+    );
+
+    csr_file _csr_file (
+        .clk(clk), .resetn(resetn),
+        .csr_num(ex_csr_num), .csr_rdata(csr_rdata),
+        .csr_we(csr_we), .csr_waddr(csr_waddr), .csr_wdata(csr_wdata), .csr_wmask(csr_wmask),
+        .crmd(csr_crmd), .dmw0(csr_dmw0), .dmw1(csr_dmw1)
     );
 
     // The multiplier has no ready signal.  Preserve its in-order responses

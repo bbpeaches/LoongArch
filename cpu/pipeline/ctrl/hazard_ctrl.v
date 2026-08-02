@@ -20,6 +20,9 @@ module hazard_ctrl (
     wire dep_rs2_14_10 = (ex_waddr != 5'd0) && (ex_waddr == id_inst[14:10]);
     wire dep_rs2_4_0   = (ex_waddr != 5'd0) && (ex_waddr == id_inst[4:0]);
 
+    wire csr_rd_source = (id_inst[31:24] == 8'h04) &&
+                         ((id_inst[9:5] == 5'd1) ||
+                          ((id_inst[9:5] != 5'd0) && (id_inst[9:5] != 5'd1)));
     wire fast_dest_is_raddr2 = (id_inst[31:26] == 6'b0101_10) | // beq
                                (id_inst[31:26] == 6'b0101_11) | // bne
                                (id_inst[31:26] == 6'b0110_00) | // blt
@@ -27,7 +30,8 @@ module hazard_ctrl (
                                (id_inst[31:26] == 6'b0110_10) | // bltu
                                (id_inst[31:26] == 6'b0110_11) | // bgeu
                                (id_inst[31:22] == 10'b0010_1001_10) | // st.w
-                               (id_inst[31:22] == 10'b0010_1001_00);  // st.b
+                               (id_inst[31:22] == 10'b0010_1001_00) | // st.b
+                               csr_rd_source;
 
     wire dep_rs2_raw = fast_dest_is_raddr2 ? dep_rs2_4_0 : dep_rs2_14_10;
 

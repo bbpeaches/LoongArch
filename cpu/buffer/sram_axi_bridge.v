@@ -76,36 +76,21 @@ module sram_axi_bridge(
 
     wire do_data_ar = data_req && !data_wr && !data_ar_acc;
 
-    reg holding_ar;
-    reg [3:0]  held_arid;
-    reg [31:0] held_araddr;
-    reg [2:0]  held_arsize;
-    reg [7:0]  held_arlen;
-    reg [1:0]  held_arburst;
-
-    always @(posedge clk) begin
-        if(!resetn) holding_ar <= 0;
-        else if(arvalid && arready) holding_ar <= 0;
-        else if(arvalid && !arready) begin
-            holding_ar   <= 1;
-            held_arid    <= arid;
-            held_araddr  <= araddr;
-            held_arsize  <= arsize;
-            held_arlen   <= arlen;
-            held_arburst <= arburst;
-        end
-    end
-
     wire do_data_burst = (data_size == 2'b11); 
 
-    assign arvalid = holding_ar ? 1'b1 : (do_data_ar || icache_arvalid);
-    assign arid    = holding_ar ? held_arid  : (do_data_ar ? 4'd1 : 4'd0);
-    assign araddr  = holding_ar ? held_araddr : (do_data_ar ? data_addr : icache_araddr);
+    // Both request producers hold their request, address and attributes until
+    // arready is observed.  A fixed-priority mux is therefore sufficient and
+    // avoids placing the EX-stage address adder on a bridge register-enable
+    // timing path.
+    wire choose_data_ar = do_data_ar;
+    assign arvalid = choose_data_ar || icache_arvalid;
+    assign arid    = choose_data_ar ? 4'd1 : 4'd0;
+    assign araddr  = choose_data_ar ? data_addr : icache_araddr;
     
-    assign arsize  = holding_ar ? held_arsize : (do_data_ar ? (do_data_burst ? 3'd2 : {1'b0, data_size}) : 3'd2);
-    assign arlen   = holding_ar ? held_arlen  : (do_data_ar ? (do_data_burst ? 8'd3 : 8'd0) : 8'd7);
+    assign arsize  = choose_data_ar ? (do_data_burst ? 3'd2 : {1'b0, data_size}) : 3'd2;
+    assign arlen   = choose_data_ar ? (do_data_burst ? 8'd3 : 8'd0) : 8'd7;
     
-    assign arburst = holding_ar ? held_arburst : (do_data_ar ? 2'b01 : 2'b10);
+    assign arburst = choose_data_ar ? 2'b01 : 2'b10;
     
     assign arlock  = 2'd0;
     assign arcache = 4'd0;

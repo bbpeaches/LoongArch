@@ -55,6 +55,10 @@ module mycpu_top(
     wire        inst_sram_addr_ok;
     wire        inst_sram_data_ok;
     wire [31:0] inst_sram_rdata;
+    wire        icache_cacop_valid;
+    wire [ 4:0] icache_cacop_code;
+    wire [31:0] icache_cacop_addr;
+    wire        icache_cacop_busy;
 
     wire        cpu_data_req;
     wire        cpu_data_wr;
@@ -95,6 +99,10 @@ module mycpu_top(
         .inst_sram_addr_ok  (inst_sram_addr_ok),
         .inst_sram_data_ok  (inst_sram_data_ok),
         .inst_sram_rdata    (inst_sram_rdata),
+        .icache_cacop_valid (icache_cacop_valid),
+        .icache_cacop_code  (icache_cacop_code),
+        .icache_cacop_addr  (icache_cacop_addr),
+        .icache_cacop_busy  (icache_cacop_busy),
 
         .data_sram_req      (cpu_data_req),
         .data_sram_wr       (cpu_data_wr),
@@ -146,6 +154,10 @@ module mycpu_top(
         .cache_rdata    (inst_sram_rdata),
         .cache_addr_ok  (inst_sram_addr_ok),
         .cache_data_ok  (inst_sram_data_ok),
+        .cacop_valid    (icache_cacop_valid),
+        .cacop_code     (icache_cacop_code),
+        .cacop_addr     (icache_cacop_addr),
+        .cacop_busy     (icache_cacop_busy),
 
         .arid           (),
         .araddr         (icache_araddr),

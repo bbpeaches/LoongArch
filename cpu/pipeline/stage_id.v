@@ -26,6 +26,11 @@ module stage_id (
     output wire        id_is_st_b,
     output wire        id_is_ld_b,
     output wire        id_is_ld_bu,
+    output wire        id_is_cpucfg,
+    output wire [ 1:0] id_csr_op,
+    output wire [13:0] id_csr_num,
+    output wire        id_is_cacop,
+    output wire [ 4:0] id_cacop_code,
     output wire [11:0] id_alu_op,
     output wire [31:0] id_alu_src1,
     output wire [31:0] id_alu_src2,
@@ -47,6 +52,10 @@ module stage_id (
     wire [11:0] id_alu_op_raw;
     wire        id_use_imm, id_invalid;
     wire        inst_b, inst_beq, inst_bne, inst_blt, inst_bge, inst_bltu, inst_bgeu, is_bl, is_jirl, is_pcaddu12i;
+    wire        id_is_cpucfg_raw, id_is_cacop_raw;
+    wire [ 1:0] id_csr_op_raw;
+    wire [13:0] id_csr_num_raw;
+    wire [ 4:0] id_cacop_code_raw;
     wire [ 4:0] dec_rs1, dec_rs2;
 
     decoder_top _decoder_top (
@@ -60,7 +69,9 @@ module stage_id (
         .inst_blt  (inst_blt),    .inst_bge  (inst_bge),   .inst_bltu (inst_bltu), .inst_bgeu(inst_bgeu),
         .is_bl(is_bl), .is_jirl(is_jirl), .is_pcaddu12i(is_pcaddu12i),
         .is_ld_b(id_is_ld_b_raw), .is_st_b(id_is_st_b_raw), .is_st_w(id_is_st_w_raw),
-        .is_ld_bu(id_is_ld_bu_raw)
+        .is_ld_bu(id_is_ld_bu_raw),
+        .is_cpucfg(id_is_cpucfg_raw), .csr_op(id_csr_op_raw), .csr_num(id_csr_num_raw),
+        .is_cacop(id_is_cacop_raw), .cacop_code(id_cacop_code_raw)
     );
 
     assign id_valid_inst = id_valid && !id_invalid;
@@ -76,6 +87,11 @@ module stage_id (
     assign id_is_st_b = id_valid_inst && id_is_st_b_raw;
     assign id_is_ld_b = id_valid_inst && id_is_ld_b_raw;
     assign id_is_ld_bu= id_valid_inst && id_is_ld_bu_raw;
+    assign id_is_cpucfg = id_valid_inst && id_is_cpucfg_raw;
+    assign id_csr_op = id_valid_inst ? id_csr_op_raw : 2'd0;
+    assign id_csr_num = id_valid_inst ? id_csr_num_raw : 14'd0;
+    assign id_is_cacop = id_valid_inst && id_is_cacop_raw;
+    assign id_cacop_code = id_valid_inst ? id_cacop_code_raw : 5'd0;
     assign id_alu_op  = id_valid_inst ? id_alu_op_raw : 12'd0;
 
     wire [31:0] rf_rdata1, rf_rdata2;

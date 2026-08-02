@@ -23,15 +23,26 @@ module decoder_top (
     output wire        is_ld_b,
     output wire        is_st_b,
     output wire        is_st_w,
-    output wire        is_ld_bu
+    output wire        is_ld_bu,
+    output wire        is_cpucfg,
+    output wire [ 1:0] csr_op,
+    output wire [13:0] csr_num,
+    output wire        is_cacop,
+    output wire [ 4:0] cacop_code
 );
     wire [21:0] op_22 = inst[31:10];
     wire [16:0] op_17 = inst[31:15];
     wire [ 9:0] op_10 = inst[31:22];
     wire [ 6:0] op_7  = inst[31:25];
     wire [ 5:0] op_6  = inst[31:26];
+    wire [ 7:0] op_8  = inst[31:24];
 
     wire inst_cpucfg    = (op_22 == 22'b0000_0000_0001_1011_0100_00);
+    wire inst_csrrd     = (op_8 == 8'h04) && (inst[9:5] == 5'd0);
+    wire inst_csrwr     = (op_8 == 8'h04) && (inst[9:5] == 5'd1);
+    wire inst_csrxchg   = (op_8 == 8'h04) && (inst[9:5] != 5'd0) && (inst[9:5] != 5'd1);
+    wire inst_csr       = inst_csrrd | inst_csrwr | inst_csrxchg;
+    wire inst_cacop     = (op_10 == 10'b0000_0110_00);
 
     // 算术 / 逻辑 / 移位
     wire inst_add_w     = (op_17 == 17'b0000_0000_0001_00000);
@@ -78,7 +89,7 @@ module decoder_top (
     assign inst_bltu    = (op_6  == 6'b0110_10);
     assign inst_bgeu    = (op_6  == 6'b0110_11);
     
-    assign rf_raddr1 = inst[9:5];   
+    assign rf_raddr1 = inst_csrwr ? 5'd0 : inst[9:5];
     wire fast_dest_is_raddr2 = (inst[31:26] == 6'b0101_10) | // beq
                                (inst[31:26] == 6'b0101_11) | // bne
                                (inst[31:26] == 6'b0110_00) | // blt
@@ -86,7 +97,8 @@ module decoder_top (
                                (inst[31:26] == 6'b0110_10) | // bltu
                                (inst[31:26] == 6'b0110_11) | // bgeu
                                (inst[31:22] == 10'b0010_1001_10) | // st.w
-                               (inst[31:22] == 10'b0010_1001_00);  // st.b
+                               (inst[31:22] == 10'b0010_1001_00) | // st.b
+                               inst_csrwr | inst_csrxchg;
 
     assign rf_raddr2 = fast_dest_is_raddr2 ? inst[4:0] : inst[14:10];
     assign rf_waddr  = (inst_bl_raw) ? 5'd1 : inst[4:0];  
@@ -96,7 +108,7 @@ module decoder_top (
                        inst_slli_w | inst_srli_w | inst_srai_w | inst_slti | inst_sltui |
                        inst_addi_w | inst_ori | inst_andi | inst_xori | inst_ld_w | inst_st_w |
                        inst_ld_b | inst_st_b_raw | inst_pcaddu12i | inst_lu12i_w |
-                       inst_bl_raw | inst_jirl_raw | inst_cpucfg | inst_b |
+                       inst_bl_raw | inst_jirl_raw | inst_cpucfg | inst_csr | inst_cacop | inst_b |
                        inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu | inst_ld_bu);
 
     id_ctrl_gen _id_ctrl_gen (
@@ -131,6 +143,8 @@ module decoder_top (
         .inst_jirl      (inst_jirl_raw),
         .inst_cpucfg    (inst_cpucfg),
         .inst_ld_bu     (inst_ld_bu), 
+        .inst_csr       (inst_csr),
+        .inst_cacop     (inst_cacop),
 
         .rf_we          (rf_we),
         .use_imm        (use_imm),
@@ -149,7 +163,7 @@ module decoder_top (
     id_imm_ext _id_imm_ext (
         .inst         (inst[25:0]),
         .inst_ld_w    (inst_ld_w | inst_ld_b | inst_ld_bu), 
-        .inst_st_w    (inst_st_w | inst_st_b_raw),
+        .inst_st_w    (inst_st_w | inst_st_b_raw | inst_cacop),
         .inst_addi_w  (inst_addi_w),
         .inst_slti    (inst_slti | inst_sltui),
         .inst_ori     (inst_ori | inst_andi | inst_xori),
@@ -160,5 +174,13 @@ module decoder_top (
         .inst_slli_w  (inst_slli_w | inst_srli_w | inst_srai_w),
         .imm_32       (imm)
     );
+
+    assign is_cpucfg = inst_cpucfg;
+    assign csr_op = inst_csrrd ? 2'd1 :
+                    inst_csrwr ? 2'd2 :
+                    inst_csrxchg ? 2'd3 : 2'd0;
+    assign csr_num = inst[23:10];
+    assign is_cacop = inst_cacop;
+    assign cacop_code = inst[4:0];
 
 endmodule

@@ -18,6 +18,10 @@ module icache (
     input  wire        rlast  ,  // 是否是主存向 Cache 返回的最后一个数据
     input  wire        rvalid ,  // 主存向 Cache 返回数据时的数据有效信号
     output wire        rready    // 标识当前的 Cache 已经准备好可以接收主存返回的数据
+    , input  wire        cacop_valid,
+    input  wire [ 4:0] cacop_code,
+    input  wire [31:0] cacop_addr,
+    output wire        cacop_busy
 );
 
     localparam IDLE   = 2'd0;
@@ -38,6 +42,10 @@ module icache (
     reg [ 4:0] refill_offset;
 
     reg [127:0] lru_array;
+    reg         cacop_pending;
+    reg         cacop_seen;
+    reg [ 6:0]  cacop_index;
+    reg         cacop_way;
     reg         replace_way; 
 
     wire [19:0] way0_r_tag, way1_r_tag;
@@ -139,7 +147,29 @@ module icache (
                            (bypass_match && rvalid && rready);
 
     wire [7:0] w_bank_en    = (state == REFILL && rvalid && rready) ? (8'b1 << current_bank) : 8'd0;
-    wire w_tag_v_en = (state == REFILL && rvalid && rready && rlast);
+    wire refill_tag_v_en = (state == REFILL && rvalid && rready && rlast);
+    wire cacop_issue = cacop_pending && (state == IDLE);
+    assign cacop_busy = cacop_pending;
+
+    always @(posedge clk) begin
+        if (!resetn) begin
+            cacop_pending <= 1'b0;
+            cacop_seen <= 1'b0;
+            cacop_index <= 7'd0;
+            cacop_way <= 1'b0;
+        end else begin
+            if (cacop_valid && (cacop_code == 5'h00) && !cacop_seen) begin
+                cacop_pending <= 1'b1;
+                cacop_seen <= 1'b1;
+                cacop_index <= cacop_addr[11:5];
+                cacop_way <= cacop_addr[0];
+            end else if (cacop_issue) begin
+                cacop_pending <= 1'b0;
+            end
+            if (!cacop_valid && !cacop_pending)
+                cacop_seen <= 1'b0;
+        end
+    end
 
     // Way 0
     icache_way way0 (
@@ -150,10 +180,10 @@ module icache (
         .r_tag_out   (way0_r_tag),
         .r_v_out     (way0_r_v),
         .r_data_out  (way0_r_data),
-        .w_tag_v_en  (w_tag_v_en && (replace_way == 1'b0)),
-        .w_index     (refill_index), 
-        .w_tag       (refill_tag), 
-        .w_v         (1'b1),
+        .w_tag_v_en  ((refill_tag_v_en && (replace_way == 1'b0)) || (cacop_issue && !cacop_way)),
+        .w_index     (cacop_issue ? cacop_index : refill_index),
+        .w_tag       (cacop_issue ? 20'd0 : refill_tag),
+        .w_v         (cacop_issue ? 1'b0 : 1'b1),
         .w_bank_en   ((replace_way == 1'b0) ? w_bank_en : 8'd0),
         .w_bank_data (rdata)
     );
@@ -167,10 +197,10 @@ module icache (
         .r_tag_out   (way1_r_tag),
         .r_v_out     (way1_r_v),
         .r_data_out  (way1_r_data),
-        .w_tag_v_en  (w_tag_v_en && (replace_way == 1'b1)),
-        .w_index     (refill_index), 
-        .w_tag       (refill_tag),  
-        .w_v         (1'b1),
+        .w_tag_v_en  ((refill_tag_v_en && (replace_way == 1'b1)) || (cacop_issue && cacop_way)),
+        .w_index     (cacop_issue ? cacop_index : refill_index),
+        .w_tag       (cacop_issue ? 20'd0 : refill_tag),
+        .w_v         (cacop_issue ? 1'b0 : 1'b1),
         .w_bank_en   ((replace_way == 1'b1) ? w_bank_en : 8'd0),
         .w_bank_data (rdata)
     );

@@ -10,6 +10,12 @@ module stage_ex (
     input  wire [31:0] ex_alu_src1,
     input  wire [31:0] ex_alu_src2,
     input  wire [31:0] ex_rdata2,
+    input  wire        ex_is_cpucfg,
+    input  wire [ 1:0] ex_csr_op,
+    input  wire [13:0] ex_csr_num,
+    input  wire [31:0] csr_rdata,
+    input  wire        ex_is_cacop,
+    input  wire [ 4:0] ex_cacop_code,
     input  wire [ 4:0] ex_rs2,
     input  wire        mem_is_load,
     input  wire [ 4:0] mem_waddr,
@@ -31,6 +37,14 @@ module stage_ex (
     output wire [31:0] data_sram_addr,
     output wire [31:0] data_sram_wdata,
     output wire        ex_mem_read,
+
+    output wire        csr_we,
+    output wire [13:0] csr_waddr,
+    output wire [31:0] csr_wdata,
+    output wire [31:0] csr_wmask,
+    output wire        ex_cacop_valid,
+    output wire [ 4:0] ex_cacop_code_out,
+    output wire [31:0] ex_cacop_addr,
 
     output wire        ex_br_taken,
     output wire [31:0] ex_br_target,
@@ -109,7 +123,34 @@ module stage_ex (
     assign upd_bpu_pred_taken  = ex_pred_taken;
     assign upd_bpu_target      = actual_target;
 
-    assign ex_result = (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;
+    function [31:0] cpucfg_value;
+        input [31:0] index;
+        begin
+            case (index)
+                // This core has a 2-way, 128-set, 32-byte-line L1 I-cache.
+                32'h0000_0010: cpucfg_value = 32'h0000_0001;
+                32'h0000_0011: cpucfg_value = 32'h0507_0001;
+                // There is deliberately no D-cache in this configuration.
+                32'h0000_0012: cpucfg_value = 32'h0000_0000;
+                default:       cpucfg_value = 32'h0000_0000;
+            endcase
+        end
+    endfunction
+
+    // CSRWR and CSRXCHG return the pre-write CSR value through rd.  CSRWR
+    // uses an all-one mask; CSRXCHG takes its mask from rj.
+    assign csr_we    = ex_valid_inst && !stall_ex && (ex_csr_op == 2'd2 || ex_csr_op == 2'd3);
+    assign csr_waddr = ex_csr_num;
+    assign csr_wdata = ex_rdata2;
+    assign csr_wmask = (ex_csr_op == 2'd2) ? 32'hffff_ffff : ex_alu_src1;
+
+    assign ex_cacop_valid = ex_valid_inst && ex_is_cacop && !stall_ex;
+    assign ex_cacop_code_out = ex_cacop_code;
+    assign ex_cacop_addr = ex_mem_addr;
+
+    assign ex_result = ex_is_cpucfg ? cpucfg_value(ex_alu_src1) :
+                       (ex_csr_op != 2'd0) ? csr_rdata :
+                       (ex_wb_sel == 2'b11) ? (ex_pc + 32'd4) : ex_alu_result;
     
     assign ex_addr_align = ex_mem_addr[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;
