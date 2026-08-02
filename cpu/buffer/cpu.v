@@ -57,10 +57,19 @@ module cpu(
                            ((csr_crmd[1:0] == 2'd3) && csr_dmw0[3]);
     wire dmw1_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw1[0]) ||
                            ((csr_crmd[1:0] == 2'd3) && csr_dmw1[3]);
-    wire inst_dmw0_match = paged_mode && dmw0_plv_enable && (internal_inst_addr[31:29] == csr_dmw0[31:29]);
-    wire inst_dmw1_match = paged_mode && dmw1_plv_enable && (internal_inst_addr[31:29] == csr_dmw1[31:29]);
-    wire data_dmw0_match = paged_mode && dmw0_plv_enable && (internal_data_addr[31:29] == csr_dmw0[31:29]);
-    wire data_dmw1_match = paged_mode && dmw1_plv_enable && (internal_data_addr[31:29] == csr_dmw1[31:29]);
+    // Keep the six-input virtual-segment comparisons as individual terms.
+    // Each is exactly one LUT6 on 7-series; separating it from the paging
+    // and privilege terms prevents that unrelated control from being folded
+    // into the EX-address carry-output cone.
+    (* keep = "true" *) wire inst_dmw0_vseg_match = (internal_inst_addr[31:29] == csr_dmw0[31:29]);
+    (* keep = "true" *) wire inst_dmw1_vseg_match = (internal_inst_addr[31:29] == csr_dmw1[31:29]);
+    (* keep = "true" *) wire data_dmw0_vseg_match = (internal_data_addr[31:29] == csr_dmw0[31:29]);
+    (* keep = "true" *) wire data_dmw1_vseg_match = (internal_data_addr[31:29] == csr_dmw1[31:29]);
+
+    wire inst_dmw0_match = paged_mode && dmw0_plv_enable && inst_dmw0_vseg_match;
+    wire inst_dmw1_match = paged_mode && dmw1_plv_enable && inst_dmw1_vseg_match;
+    wire data_dmw0_match = paged_mode && dmw0_plv_enable && data_dmw0_vseg_match;
+    wire data_dmw1_match = paged_mode && dmw1_plv_enable && data_dmw1_vseg_match;
     // A DMW preserves VA[28:0], so keep the cache index/offset path as a
     // direct wire and select only the physical segment bits.
     wire [2:0] internal_inst_pseg = inst_dmw0_match ? csr_dmw0[27:25] :
