@@ -15,3 +15,5 @@ prompt2.md
 tb/
 *.pb
 *.rpt
+xilinx_ip/*
+!*.xci
