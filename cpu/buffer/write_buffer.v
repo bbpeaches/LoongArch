@@ -55,15 +55,6 @@ module write_buffer #(
         input [31:0] addr_b;
         reg [5:0] word_addr_match;
         begin
-            // This is a conservative load-after-store conflict filter.  A
-            // true word match always matches every slice below, so no stale
-            // read can pass a buffered write.  Non-identical words may very
-            // rarely share this 18-bit fingerprint; that only postpones an
-            // otherwise independent load until the older store completes.
-            // Six 3-bit comparisons and one LUT6 reduction save one logic
-            // level versus the exact 30-bit CAM comparison on the EX-address
-            // path, while retaining enough address-region bits to avoid
-            // systematic BaseRAM/ExtRAM streaming aliases.
             word_addr_match[0] = (addr_a[ 4: 2] == addr_b[ 4: 2]);
             word_addr_match[1] = (addr_a[ 7: 5] == addr_b[ 7: 5]);
             word_addr_match[2] = (addr_a[10: 8] == addr_b[10: 8]);
@@ -81,15 +72,13 @@ module write_buffer #(
         if (load_req) begin
             for (conflict_i = 0; conflict_i < DEPTH; conflict_i = conflict_i + 1) begin
                 if (buf_valid[conflict_i]) begin
-                    if (is_mmio_addr(cpu_addr) || is_mmio_addr(buf_addr[conflict_i]) || same_word_addr(cpu_addr, buf_addr[conflict_i]))
+                    if (is_mmio_addr(cpu_addr) || is_mmio_addr(buf_addr[conflict_i]) ||
+                        same_word_addr(cpu_addr, buf_addr[conflict_i]))
                         has_conflict = 1'b1;
                 end
             end
         end
     end
-
-    wire load_ready_to_go  = load_req && !has_conflict;
-    wire store_ready_to_go = !buf_empty;
 
     localparam S_IDLE     = 2'd0;
     localparam S_DO_LOAD  = 2'd1;
@@ -97,89 +86,59 @@ module write_buffer #(
 
     reg [1:0] state;
 
+    wire load_ready_to_go  = load_req && !has_conflict;
+    wire store_completing  = (state == S_DO_STORE) && mem_data_ok;
+    wire store_ready_to_go = (count > 3'd1) ||
+                             ((count == 3'd1) && !store_completing);
+
+    wire op_done   = ((state == S_DO_LOAD) || (state == S_DO_STORE)) && mem_data_ok;
+    wire can_pick  = (state == S_IDLE) || op_done;
+    wire pick_load  = can_pick && load_ready_to_go;
+    wire pick_store = can_pick && !load_ready_to_go && store_ready_to_go;
+
     always @(posedge clk) begin
         if (~resetn) begin
             state <= S_IDLE;
-        end else case (state)
-            S_IDLE: begin
-                if (load_ready_to_go) begin
-                    // The integrated SRAM slave has at least one response
-                    // wait cycle, so a newly issued request cannot complete
-                    // in this S_IDLE cycle.
-                    state <= S_DO_LOAD;
-                end else if (store_ready_to_go) begin
-                    state <= S_DO_STORE;
+        end else begin
+            case (state)
+                S_IDLE: begin
+                    if (pick_load)       state <= S_DO_LOAD;
+                    else if (pick_store) state <= S_DO_STORE;
                 end
-            end
-            S_DO_LOAD: begin
-                if (mem_data_ok) state <= S_IDLE;
-            end
-            S_DO_STORE: begin
-                if (mem_data_ok) state <= S_IDLE;
-            end
-            default: state <= S_IDLE;
-        endcase
+                S_DO_LOAD, S_DO_STORE: begin
+                    if (mem_data_ok) begin
+                        if (pick_load)       state <= S_DO_LOAD;
+                        else if (pick_store) state <= S_DO_STORE;
+                        else                 state <= S_IDLE;
+                    end
+                end
+                default: state <= S_IDLE;
+            endcase
+        end
     end
 
     reg [31:0] load_addr_latch;
     reg [ 1:0] load_size_latch;
     always @(posedge clk) begin
-        // These values are only consumed after S_DO_LOAD is entered.  Capture
-        // every idle-cycle load request so the address-CAM and AXI-ready
-        // decision do not sit on the latch enable path.
-        if (state == S_IDLE && load_req) begin
+        if (pick_load) begin
             load_addr_latch <= cpu_addr;
             load_size_latch <= cpu_size;
         end
     end
 
-    reg mem_addr_rcv;
-    always @(posedge clk) begin
-        if (~resetn)
-            mem_addr_rcv <= 1'b0;
-        else if (mem_req && mem_addr_ok && !mem_data_ok)
-            mem_addr_rcv <= 1'b1;
-        else if (mem_data_ok)
-            mem_addr_rcv <= 1'b0;
-    end
-
-    wire req_load_active  = (state == S_IDLE && load_ready_to_go) || (state == S_DO_LOAD);
-
-    // A queued store normally starts directly from idle.  When an incoming
-    // load aliases a buffered store, however, it used to make the load CAM,
-    // the store-launch muxes, and the AXI write capture all one combinational
-    // path.  First enter S_DO_STORE for that collision case instead.  It does
-    // not alter ordering or any non-conflicting request: a CPU store (or an
-    // idle cycle) still launches the queued store immediately, while an
-    // aliased load was already required to wait for that store to complete.
-    wire idle_store_without_load = (state == S_IDLE) &&
-                                  store_ready_to_go && !load_req;
-    wire req_store_active = idle_store_without_load || (state == S_DO_STORE);
-
-    assign mem_req   = (req_load_active || req_store_active) && !mem_addr_rcv;
-    assign mem_wr    = req_store_active;
-    assign mem_addr  = req_load_active ? ((state == S_IDLE) ? cpu_addr : load_addr_latch) : buf_addr[head];
-    assign mem_size  = req_load_active ? ((state == S_IDLE) ? cpu_size : load_size_latch) : buf_size[head];
-    assign mem_wstrb = req_load_active ? 4'd0 : buf_wstrb[head];
-    assign mem_wdata = req_load_active ? 32'd0 : buf_wdata[head];
+    // Registered peeks of buf[head] / buf[head+1].  Store issue uses these so
+    // mem_wdata is not a combo path through the load-CAM / buffer RAM (timing),
+    // while still allowing same-cycle issue on pick_store.
+    reg [31:0] q0_addr, q0_wdata;
+    reg [ 3:0] q0_wstrb;
+    reg [ 1:0] q0_size;
+    reg [31:0] q1_addr, q1_wdata;
+    reg [ 3:0] q1_wstrb;
+    reg [ 1:0] q1_size;
 
     wire store_accept = store_req && !buf_full;
-
-    assign cpu_addr_ok = (store_req && store_accept) ||
-                         (load_req && req_load_active && mem_addr_ok && !mem_addr_rcv);
-
-    // Read data returns through the AXI bridge after the request has entered
-    // S_DO_LOAD.  Do not let the current request/address CAM feed the data
-    // response qualifier: it cannot complete a new AXI read in the same
-    // cycle, and keeping that zero-latency branch creates a long false
-    // EX-address-to-global-stall combinational cone.
-    assign cpu_data_ok = (store_req && store_accept) ||
-                         ((state == S_DO_LOAD) && mem_data_ok);
-
-    assign cpu_rdata   = mem_rdata;
-
     wire store_push = store_accept;
-    wire store_pop  = req_store_active && (mem_req && mem_addr_ok && mem_data_ok || state == S_DO_STORE && mem_data_ok);
+    wire store_pop  = store_completing;
 
     integer i;
     always @(posedge clk) begin
@@ -188,6 +147,8 @@ module write_buffer #(
             tail  <= 2'd0;
             count <= 3'd0;
             for (i = 0; i < DEPTH; i = i + 1) buf_valid[i] <= 1'b0;
+            q0_addr <= 32'd0; q0_wdata <= 32'd0; q0_wstrb <= 4'd0; q0_size <= 2'd0;
+            q1_addr <= 32'd0; q1_wdata <= 32'd0; q1_wstrb <= 4'd0; q1_size <= 2'd0;
         end else begin
             if (store_push) begin
                 buf_valid[tail] <= 1'b1;
@@ -208,7 +169,86 @@ module write_buffer #(
                 2'b01: count <= count - 3'd1;
                 default: count <= count;
             endcase
+
+            // q0 tracks head entry
+            if (store_push && (count == 3'd0)) begin
+                q0_addr  <= cpu_addr;
+                q0_wdata <= cpu_wdata;
+                q0_wstrb <= cpu_wstrb;
+                q0_size  <= cpu_size;
+            end else if (store_pop) begin
+                if ((count == 3'd1) && store_push) begin
+                    q0_addr  <= cpu_addr;
+                    q0_wdata <= cpu_wdata;
+                    q0_wstrb <= cpu_wstrb;
+                    q0_size  <= cpu_size;
+                end else if (count >= 3'd2) begin
+                    q0_addr  <= q1_addr;
+                    q0_wdata <= q1_wdata;
+                    q0_wstrb <= q1_wstrb;
+                    q0_size  <= q1_size;
+                end
+            end
+
+            // q1 tracks head+1 entry
+            if (store_push && (count == 3'd1) && !store_pop) begin
+                q1_addr  <= cpu_addr;
+                q1_wdata <= cpu_wdata;
+                q1_wstrb <= cpu_wstrb;
+                q1_size  <= cpu_size;
+            end else if (store_pop && (count >= 3'd2)) begin
+                if (store_push && (count == 3'd2)) begin
+                    q1_addr  <= cpu_addr;
+                    q1_wdata <= cpu_wdata;
+                    q1_wstrb <= cpu_wstrb;
+                    q1_size  <= cpu_size;
+                end else if (count >= 3'd3) begin
+                    q1_addr  <= buf_addr[head + 2'd2];
+                    q1_wdata <= buf_wdata[head + 2'd2];
+                    q1_wstrb <= buf_wstrb[head + 2'd2];
+                    q1_size  <= buf_size[head + 2'd2];
+                end
+            end
         end
     end
+
+    reg mem_addr_rcv;
+    always @(posedge clk) begin
+        if (~resetn)
+            mem_addr_rcv <= 1'b0;
+        else if (mem_req && mem_addr_ok && !mem_data_ok)
+            mem_addr_rcv <= 1'b1;
+        else if (mem_data_ok)
+            mem_addr_rcv <= 1'b0;
+    end
+
+    wire doing_load  = (state == S_DO_LOAD && !op_done) || pick_load;
+    wire doing_store = (state == S_DO_STORE && !op_done) || pick_store;
+    // On store complete → next store, q0 still holds the retiring entry this
+    // cycle; issue from the already-registered q1 peek.
+    wire        store_use_q1   = pick_store && store_completing;
+    wire [31:0] store_iss_addr = store_use_q1 ? q1_addr  : q0_addr;
+    wire [31:0] store_iss_data = store_use_q1 ? q1_wdata : q0_wdata;
+    wire [ 3:0] store_iss_strb = store_use_q1 ? q1_wstrb : q0_wstrb;
+    wire [ 1:0] store_iss_size = store_use_q1 ? q1_size  : q0_size;
+
+    wire mem_slot_free = !mem_addr_rcv || mem_data_ok;
+
+    assign mem_req   = (doing_load || doing_store) && mem_slot_free;
+    assign mem_wr    = doing_store;
+    assign mem_addr  = doing_store ? store_iss_addr :
+                       (pick_load ? cpu_addr : load_addr_latch);
+    assign mem_size  = doing_store ? store_iss_size :
+                       (pick_load ? cpu_size : load_size_latch);
+    assign mem_wstrb = doing_store ? store_iss_strb : 4'd0;
+    assign mem_wdata = doing_store ? store_iss_data : 32'd0;
+
+    assign cpu_addr_ok = (store_req && store_accept) ||
+                         (load_req && doing_load && mem_slot_free && mem_addr_ok);
+
+    assign cpu_data_ok = (store_req && store_accept) ||
+                         ((state == S_DO_LOAD) && mem_data_ok);
+
+    assign cpu_rdata   = mem_rdata;
 
 endmodule

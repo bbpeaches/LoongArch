@@ -155,6 +155,7 @@ module stage_ex (
     assign ex_addr_align = ex_mem_addr[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;
 
+    // mem_is_load is already gated by MEM valid/we in pipe.
     wire forward_store_data = mem_is_load && (mem_waddr == ex_rs2) && (mem_waddr != 5'd0);
     wire [31:0] actual_store_data = forward_store_data ? mem_final_data : ex_rdata2;
 

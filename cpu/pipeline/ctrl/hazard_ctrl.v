@@ -11,29 +11,14 @@ module hazard_ctrl (
     
     input  wire        ex_br_taken, 
     input  wire        if_wait,  
-    input  wire        mem_wait,       
+    input  wire        mem_wait,
+    input  wire        mem_stage_wait,
     
     output wire [ 4:0] stall,
     output wire [ 4:0] flush
 );
-    wire dep_rs1_raw   = (ex_waddr != 5'd0) && (ex_waddr == id_inst[9:5]);
-    wire dep_rs2_14_10 = (ex_waddr != 5'd0) && (ex_waddr == id_inst[14:10]);
-    wire dep_rs2_4_0   = (ex_waddr != 5'd0) && (ex_waddr == id_inst[4:0]);
-
-    wire csr_rd_source = (id_inst[31:24] == 8'h04) &&
-                         ((id_inst[9:5] == 5'd1) ||
-                          ((id_inst[9:5] != 5'd0) && (id_inst[9:5] != 5'd1)));
-    wire fast_dest_is_raddr2 = (id_inst[31:26] == 6'b0101_10) | // beq
-                               (id_inst[31:26] == 6'b0101_11) | // bne
-                               (id_inst[31:26] == 6'b0110_00) | // blt
-                               (id_inst[31:26] == 6'b0110_01) | // bge
-                               (id_inst[31:26] == 6'b0110_10) | // bltu
-                               (id_inst[31:26] == 6'b0110_11) | // bgeu
-                               (id_inst[31:22] == 10'b0010_1001_10) | // st.w
-                               (id_inst[31:22] == 10'b0010_1001_00) | // st.b
-                               csr_rd_source;
-
-    wire dep_rs2_raw = fast_dest_is_raddr2 ? dep_rs2_4_0 : dep_rs2_14_10;
+    wire dep_rs1_raw = (ex_waddr != 5'd0) && (ex_waddr == id_rs1);
+    wire dep_rs2_raw = (ex_waddr != 5'd0) && (ex_waddr == id_rs2);
 
     wire ex_dep_hit = id_valid && (dep_rs1_raw || dep_rs2_raw);
 
@@ -53,6 +38,7 @@ module hazard_ctrl (
         .stall_from_id  (stall_req_from_id),
         .stall_from_if  (if_wait),
         .stall_from_mem (mem_wait),
+        .stall_from_mem_stage (mem_stage_wait),
         .flush_from_ex  (ex_br_taken), 
         .stall          (stall),
         .flush          (flush)

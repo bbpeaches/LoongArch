@@ -146,7 +146,8 @@ localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
 localparam [1:0] READ_WAIT_CYCLES  = 2'd1;
-localparam [1:0] WRITE_WAIT_CYCLES = 2'd1;
+// Soft Ext write: commit as soon as AW+W are captured (LoongArch CRN pipe used 0).
+localparam [1:0] WRITE_WAIT_CYCLES = 2'd0;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
@@ -158,17 +159,32 @@ always @(posedge clk_sram) begin
                 else if (awvalid_sram || wvalid_sram) slave_state <= S_WRITE;
             end
             S_READ: begin
-                if (rvalid_sram && rready_sram && rlast_sram) slave_state <= S_IDLE;
+                if (rvalid_sram && rready_sram && rlast_sram) begin
+                    // Zero-idle: chain into a pending write without an IDLE beat.
+                    if (awvalid_sram || wvalid_sram) slave_state <= S_WRITE;
+                    else slave_state <= S_IDLE;
+                end
             end
             S_WRITE: begin
-                if (bvalid_sram && bready_sram) slave_state <= S_IDLE;
+                if (bvalid_sram && bready_sram) begin
+                    if (arvalid_sram) slave_state <= S_READ;
+                    else if (awvalid_sram || wvalid_sram) slave_state <= S_WRITE;
+                    else slave_state <= S_IDLE;
+                end
             end
         endcase
     end
 end
 
-wire is_read  = (slave_state == S_READ)  || (slave_state == S_IDLE && arvalid_sram);
-wire is_write = (slave_state == S_WRITE) || (slave_state == S_IDLE && !arvalid_sram && (awvalid_sram || wvalid_sram));
+wire read_complete  = (slave_state == S_READ)  && rvalid_sram && rready_sram && rlast_sram;
+wire write_complete = (slave_state == S_WRITE) && bvalid_sram && bready_sram;
+
+wire is_read  = (slave_state == S_READ) ||
+                (slave_state == S_IDLE && arvalid_sram) ||
+                (write_complete && arvalid_sram);
+wire is_write = (slave_state == S_WRITE) ||
+                (slave_state == S_IDLE && !arvalid_sram && (awvalid_sram || wvalid_sram)) ||
+                (read_complete && (awvalid_sram || wvalid_sram));
 
 reg rvalid_reg;
 reg [31:0] raddr_reg;
@@ -178,8 +194,9 @@ reg [1:0]  rburst_reg;
 reg [7:0]  rbeat_cnt;
 reg [1:0]  rwait_cnt;
 
-assign arready_sram = (slave_state == S_IDLE);
-wire read_fire = (slave_state == S_IDLE) && arvalid_sram;
+assign arready_sram = (slave_state == S_IDLE) ||
+                      ((slave_state == S_WRITE) && bvalid_sram && bready_sram);
+wire read_fire = arvalid_sram && arready_sram;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin

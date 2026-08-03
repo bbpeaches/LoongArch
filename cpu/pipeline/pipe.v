@@ -89,6 +89,8 @@ module pipe(
     wire         mul_mem_wait;
     wire         ex_is_st_w;
     wire         ex_is_st_b;
+    wire         ex_is_ld_b;
+    wire         ex_is_ld_bu;
 
     reg data_addr_rcv;
     always @(posedge clk) begin
@@ -102,20 +104,26 @@ module pipe(
     end
 
     wire is_data_write = ex_is_st_w | ex_is_st_b;
+    wire is_data_byte  = is_data_write
+                       ? (internal_data_wen == 4'b0001 || internal_data_wen == 4'b0010 ||
+                          internal_data_wen == 4'b0100 || internal_data_wen == 4'b1000)
+                       : (ex_is_ld_b | ex_is_ld_bu);
+    wire is_data_half  = is_data_write &&
+                         (internal_data_wen == 4'b0011 || internal_data_wen == 4'b1100);
 
     assign data_sram_req   = internal_data_en & ~data_addr_rcv;
     assign data_sram_wr    = is_data_write;
-    assign data_sram_size  = (internal_data_wen == 4'b0001 || internal_data_wen == 4'b0010 || 
-                              internal_data_wen == 4'b0100 || internal_data_wen == 4'b1000) ? 2'b00 : 
-                             (internal_data_wen == 4'b0011 || internal_data_wen == 4'b1100) ? 2'b01 : 
-                             2'b10; 
+    assign data_sram_size  = is_data_byte ? 2'b00 :
+                             is_data_half ? 2'b01 :
+                             2'b10;
 
     assign data_sram_wstrb = is_data_write ? internal_data_wen : 4'b0000;
     assign data_sram_addr  = internal_data_paddr;
     assign data_sram_wdata = internal_data_wdata;
 
+    // EX-side waits bubble MEM; MEM-stage mul wait must hold MEM itself.
     assign data_mem_wait = internal_data_en & ~data_sram_data_ok;
-    assign mem_wait      = data_mem_wait | mul_mem_wait | icache_cacop_busy;
+    assign mem_wait      = data_mem_wait | icache_cacop_busy;
 
     wire         if_pred_taken, id_pred_taken;
     wire [31:0] if_pred_target, id_pred_target;
@@ -383,7 +391,7 @@ module pipe(
 
     wire [31:0] ex_pc, ex_alu_src1, ex_alu_src2, ex_rdata2;
     wire [ 1:0] ex_wb_sel;
-    wire         ex_mem_en, ex_is_ld_b, ex_is_ld_bu;
+    wire         ex_mem_en;
     wire         ex_is_cpucfg, ex_is_cacop;
     wire [ 1:0] ex_csr_op;
     wire [13:0] ex_csr_num;
@@ -438,11 +446,11 @@ module pipe(
     wire         csr_we;
     wire [13:0]  csr_waddr;
     wire [31:0]  csr_wdata, csr_wmask, csr_rdata;
-    wire         ex_is_mul = (ex_wb_sel == 2'b10);
+    wire         ex_is_mul = ex_valid_inst && (ex_wb_sel == 2'b10);
     assign ex_fw_valid = !ex_is_mul && !ex_mem_read;
 
-    wire mem_is_load = (mem_wb_sel == 2'b01);
-    wire mem_is_mul  = (mem_wb_sel == 2'b10);
+    wire mem_is_load = mem_valid && mem_rf_we && (mem_wb_sel == 2'b01);
+    wire mem_is_mul  = mem_valid && mem_rf_we && (mem_wb_sel == 2'b10);
 
     stage_ex _stage_ex (
         .stall_ex(stall[2]),
@@ -498,7 +506,7 @@ module pipe(
     // A response can bypass an empty FIFO directly into MEM.  When a prior
     // response is buffered, dequeue it first and enqueue the new one in the
     // same cycle, preserving multiply program order.
-    wire mul_result_consume = mem_valid && mem_is_mul && mul_result_available;
+    wire mul_result_consume = mem_is_mul && mul_result_available;
     wire mul_result_push    = mul_result_valid &&
                               !(mul_result_fifo_empty && mul_result_consume);
     wire mul_result_pop     = !mul_result_fifo_empty && mul_result_consume;
@@ -529,6 +537,7 @@ module pipe(
         .ex_pc(ex_pc), .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
         .ex_is_ld_b(ex_is_ld_b), .ex_is_ld_bu(ex_is_ld_bu),
         .ex_addr_align(ex_addr_align), .ex_result(ex_result),
+        .ex_valid_inst(ex_valid_inst),
         .mem_pc(mem_pc), .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_wb_sel(mem_wb_sel),
         .mem_is_ld_b(mem_is_ld_b), .mem_is_ld_bu(mem_is_ld_bu),
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid)
@@ -548,7 +557,7 @@ module pipe(
     wire mem_done;
 
     stage_mem _stage_mem (
-        .mem_wb_sel(mem_wb_sel), .mem_is_ld_b(mem_is_ld_b),
+        .mem_wb_sel(mem_wb_sel), .mem_rf_we(mem_rf_we), .mem_is_ld_b(mem_is_ld_b),
         .mem_is_ld_bu(mem_is_ld_bu),
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_mul_result(mem_mul_result), .mem_valid(mem_valid),
         .data_sram_rdata(actual_data_rdata),
@@ -585,7 +594,8 @@ module pipe(
         .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read), .ex_is_mul(ex_is_mul),
         .ex_br_taken(ex_br_taken), 
         .if_wait(inst_sram_wait),  
-        .mem_wait(mem_wait),       
+        .mem_wait(mem_wait),
+        .mem_stage_wait(mul_mem_wait),
         .stall(stall), .flush(flush)
     );
 

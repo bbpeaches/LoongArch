@@ -67,6 +67,8 @@ module sram_axi_bridge(
     
     wire data_r_data_last = rvalid && rready && (rid == 4'd1) && rlast; 
     
+    // Accept a new data AR as soon as the previous data R completes, even if
+    // icache is also requesting — data keeps priority via choose_data_ar.
     reg data_ar_acc;
     always @(posedge clk) begin
         if(!resetn) data_ar_acc <= 0;
@@ -74,7 +76,10 @@ module sram_axi_bridge(
         else if(data_r_data_last) data_ar_acc <= 0;
     end
 
-    wire do_data_ar = data_req && !data_wr && !data_ar_acc;
+    // Drop data_ar_acc combinationally on last beat so a back-to-back CPU load
+    // can assert AR in the same cycle the previous R completes.
+    wire data_ar_busy = data_ar_acc && !data_r_data_last;
+    wire do_data_ar = data_req && !data_wr && !data_ar_busy;
 
     wire do_data_burst = (data_size == 2'b11); 
 
@@ -100,44 +105,55 @@ module sram_axi_bridge(
     wire data_req_w = data_req && data_wr;
 
     reg aw_sent, w_sent;
+    reg holding_aw;
+    reg holding_w;
     always @(posedge clk) begin
         if(!resetn) aw_sent <= 0;
-        else if(bvalid && bready) aw_sent <= 0;
         else if(awvalid && awready) aw_sent <= 1;
+        else if(bvalid && bready) aw_sent <= 0;
     end
     always @(posedge clk) begin
         if(!resetn) w_sent <= 0;
-        else if(bvalid && bready) w_sent <= 0;
         else if(wvalid && wready) w_sent <= 1;
+        else if(bvalid && bready) w_sent <= 0;
     end
 
-    reg holding_aw;
+    // Free the write channel on B so a back-to-back store can re-assert AW/W
+    // in the completion cycle.  capture_* must stay free of data_req (load CAM).
+    wire aw_free = !aw_sent || (bvalid && bready);
+    wire w_free  = !w_sent  || (bvalid && bready);
+    wire capture_aw = data_wr && aw_free && !holding_aw;
+    wire capture_w  = data_wr && w_free  && !holding_w;
+
     reg [31:0] held_awaddr;
     reg [2:0]  held_awsize;
     always @(posedge clk) begin
         if(!resetn) holding_aw <= 0;
         else if(awvalid && awready) holding_aw <= 0;
-        else if(awvalid && !awready) begin
-            holding_aw  <= 1;
-            held_awaddr <= awaddr;
-            held_awsize <= awsize;
+        else if(capture_aw && !awready) holding_aw <= 1;
+    end
+    always @(posedge clk) begin
+        if (capture_aw) begin
+            held_awaddr <= data_addr;
+            held_awsize <= {1'b0, data_size};
         end
     end
 
-    reg holding_w;
     reg [31:0] held_wdata;
     reg [3:0]  held_wstrb;
     always @(posedge clk) begin
         if(!resetn) holding_w <= 0;
         else if(wvalid && wready) holding_w <= 0;
-        else if(wvalid && !wready) begin
-            holding_w  <= 1;
-            held_wdata <= wdata;
-            held_wstrb <= wstrb;
+        else if(capture_w && !wready) holding_w <= 1;
+    end
+    always @(posedge clk) begin
+        if (capture_w) begin
+            held_wdata <= data_wdata;
+            held_wstrb <= data_wstrb;
         end
     end
 
-    assign awvalid = holding_aw ? 1'b1 : (data_req_w && !aw_sent);
+    assign awvalid = holding_aw ? 1'b1 : (data_req_w && aw_free);
     assign awaddr  = holding_aw ? held_awaddr : data_addr;
     assign awsize  = holding_aw ? held_awsize : {1'b0, data_size};
     assign awid    = 4'd1;
@@ -147,14 +163,16 @@ module sram_axi_bridge(
     assign awcache = 4'd0;
     assign awprot  = 3'd0;
 
-    assign wvalid  = holding_w ? 1'b1 : (data_req_w && !w_sent);
+    assign wvalid  = holding_w ? 1'b1 : (data_req_w && w_free);
     assign wdata   = holding_w ? held_wdata : data_wdata;
     assign wstrb   = holding_w ? held_wstrb : data_wstrb;
     assign wid     = 4'd1;
     assign wlast   = 1'b1;
 
-    wire write_addr_ok = (awvalid && awready && w_sent) ||
-                         (wvalid && wready && aw_sent) ||
+    wire aw_sent_eff = aw_sent && !(bvalid && bready);
+    wire w_sent_eff  = w_sent  && !(bvalid && bready);
+    wire write_addr_ok = (awvalid && awready && w_sent_eff) ||
+                         (wvalid && wready && aw_sent_eff) ||
                          (awvalid && awready && wvalid && wready);
 
     assign data_addr_ok = (arvalid && arready && (arid == 4'd1)) || (data_req_w && write_addr_ok);

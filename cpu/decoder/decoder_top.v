@@ -89,7 +89,10 @@ module decoder_top (
     assign inst_bltu    = (op_6  == 6'b0110_10);
     assign inst_bgeu    = (op_6  == 6'b0110_11);
     
-    assign rf_raddr1 = inst_csrwr ? 5'd0 : inst[9:5];
+    // Zero unused register ports so immediates / PC-relative encodings do not
+    // create false RAW stalls or forward matches in the pipeline.
+    wire uses_raddr1 = !(inst_lu12i_w | inst_pcaddu12i | inst_bl_raw | inst_b | inst_csrrd);
+    assign rf_raddr1 = (!uses_raddr1 || inst_csrwr) ? 5'd0 : inst[9:5];
     wire fast_dest_is_raddr2 = (inst[31:26] == 6'b0101_10) | // beq
                                (inst[31:26] == 6'b0101_11) | // bne
                                (inst[31:26] == 6'b0110_00) | // blt
@@ -100,7 +103,17 @@ module decoder_top (
                                (inst[31:22] == 10'b0010_1001_00) | // st.b
                                inst_csrwr | inst_csrxchg;
 
-    assign rf_raddr2 = fast_dest_is_raddr2 ? inst[4:0] : inst[14:10];
+    // Only expose rs2 when the instruction actually reads it; otherwise
+    // immediate / offset bits would create false RAW stalls in hazard_ctrl.
+    wire uses_raddr2 = inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |
+                       inst_nor | inst_slt | inst_sltu | inst_mul_w |
+                       inst_sll_w | inst_srl_w | inst_sra_w |
+                       inst_st_w | inst_st_b_raw |
+                       inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu |
+                       inst_csrwr | inst_csrxchg;
+
+    assign rf_raddr2 = !uses_raddr2 ? 5'd0 :
+                       fast_dest_is_raddr2 ? inst[4:0] : inst[14:10];
     assign rf_waddr  = (inst_bl_raw) ? 5'd1 : inst[4:0];  
 
     assign invalid = ~(inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |

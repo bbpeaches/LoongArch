@@ -8,6 +8,7 @@ module ex_mem_reg (
     input  wire        ex_is_ld_b, ex_is_ld_bu,
     input  wire [ 1:0] ex_addr_align,
     input  wire [31:0] ex_result,
+    input  wire        ex_valid_inst,
 
     output reg  [31:0] mem_pc,
     output reg         mem_rf_we,
@@ -26,7 +27,7 @@ module ex_mem_reg (
             mem_valid <= 1'b0;
             mem_rf_we <= 1'b0;
         end else if (!stall) begin
-            mem_valid <= 1'b1;
+            mem_valid <= ex_valid_inst;
             mem_rf_we <= ex_rf_we;
         end
     end
@@ -36,6 +37,11 @@ module ex_mem_reg (
             mem_pc <= 32'd0; mem_waddr <= 5'd0; mem_wb_sel <= 2'd0; 
             mem_is_ld_b <= 1'b0; mem_is_ld_bu <= 1'b0; 
             mem_addr_align <= 2'b00; mem_result <= 32'd0;
+        end else if (flush) begin
+            mem_waddr  <= 5'd0;
+            mem_wb_sel <= 2'd0;
+            mem_is_ld_b  <= 1'b0;
+            mem_is_ld_bu <= 1'b0;
         end else if (!stall) begin
             mem_pc <= ex_pc; mem_waddr <= ex_waddr; mem_wb_sel <= ex_wb_sel; 
             mem_is_ld_b <= ex_is_ld_b; mem_is_ld_bu <= ex_is_ld_bu; 
