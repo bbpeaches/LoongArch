@@ -1,4 +1,4 @@
-module cpu(
+module pipe(
     input  wire        clk,
     input  wire        resetn,
     

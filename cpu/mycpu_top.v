@@ -86,7 +86,7 @@ module mycpu_top(
     wire        debug_wb_rf_wen_1bit;
     assign debug_wb_rf_we = {4{debug_wb_rf_wen_1bit}};
 
-    cpu u_cpu (
+    pipe u_pipe (
         .clk                (aclk),
         .resetn             (aresetn),
 
