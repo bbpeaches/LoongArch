@@ -145,8 +145,8 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
-localparam [1:0] READ_WAIT_CYCLES  = 2'd4;
-localparam [1:0] WRITE_WAIT_CYCLES = 2'd4;
+localparam [2:0] READ_WAIT_CYCLES  = 3'd4;
+localparam [2:0] WRITE_WAIT_CYCLES = 3'd4;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
@@ -190,7 +190,7 @@ reg [3:0]  rid_reg;
 reg [7:0]  rlen_reg;
 reg [1:0]  rburst_reg;
 reg [7:0]  rbeat_cnt;
-reg [1:0]  rwait_cnt;
+reg [2:0]  rwait_cnt;
 
 assign arready_sram = (slave_state == S_IDLE) ||
                       ((slave_state == S_WRITE) && bvalid_sram && bready_sram);
@@ -204,7 +204,7 @@ always @(posedge clk_sram) begin
         rlen_reg   <= 8'd0;
         rburst_reg <= 2'd0;
         rbeat_cnt  <= 8'd0;
-        rwait_cnt  <= 2'd0;
+        rwait_cnt  <= 3'd0;
     end else if (read_fire) begin
         rvalid_reg <= 1'b0;
         raddr_reg  <= araddr_sram;
@@ -212,21 +212,21 @@ always @(posedge clk_sram) begin
         rlen_reg   <= arlen_sram;
         rburst_reg <= arburst_sram;
         rbeat_cnt  <= 8'd0;
-        rwait_cnt  <= 2'd0;
+        rwait_cnt  <= 3'd0;
     end else if (slave_state == S_READ) begin
         if (!rvalid_reg) begin
             if (rwait_cnt >= READ_WAIT_CYCLES) begin
                 rvalid_reg <= 1'b1;
             end else begin
-                rwait_cnt <= rwait_cnt + 2'd1;
+                rwait_cnt <= rwait_cnt + 3'd1;
             end
         end else if (rready_sram) begin
             if (rbeat_cnt == rlen_reg) begin
                 rvalid_reg <= 1'b0;
-                rwait_cnt  <= 2'd0;
+                rwait_cnt  <= 3'd0;
             end else begin
                 rvalid_reg <= 1'b0;
-                rwait_cnt  <= 2'd0;
+                rwait_cnt  <= 3'd0;
                 rbeat_cnt  <= rbeat_cnt + 8'd1;
                 if (rburst_reg == 2'b10) begin
                     raddr_reg <= {raddr_reg[31:5], raddr_reg[4:2] + 3'd1, 2'b00};
@@ -255,7 +255,7 @@ reg [31:0] wdata_reg;
 reg [ 3:0] wstrb_reg;
 reg [ 3:0] bid_reg;
 reg bvalid_reg;
-reg [1:0]  wwait_cnt;
+reg [2:0]  wwait_cnt;
 
 assign awready_sram = is_write && !aw_recvd && !bvalid_reg;
 assign wready_sram  = is_write && !w_recvd  && !bvalid_reg;
@@ -274,12 +274,12 @@ always @(posedge clk_sram) begin
         wstrb_reg <= 4'd0;
         bid_reg   <= 4'd0;
         bvalid_reg<= 1'b0;
-        wwait_cnt <= 2'd0;
+        wwait_cnt <= 3'd0;
     end else begin
         if (bvalid_sram && bready_sram) begin
             bvalid_reg <= 1'b0;
             aw_recvd   <= 1'b0;
-            wwait_cnt  <= 2'd0;
+            wwait_cnt  <= 3'd0;
         end
 
         w_recvd           <= w_recvd_next;
@@ -298,12 +298,12 @@ always @(posedge clk_sram) begin
         if (slave_state == S_WRITE && aw_recvd && w_recvd && !bvalid_reg) begin
             if (wwait_cnt >= WRITE_WAIT_CYCLES) begin
                 bvalid_reg <= 1'b1;
-                wwait_cnt  <= 2'd0;
+                wwait_cnt  <= 3'd0;
             end else begin
-                wwait_cnt <= wwait_cnt + 2'd1;
+                wwait_cnt <= wwait_cnt + 3'd1;
             end
         end else if (!(aw_recvd && w_recvd) && !bvalid_reg) begin
-            wwait_cnt <= 2'd0;
+            wwait_cnt <= 3'd0;
         end
     end
 end
