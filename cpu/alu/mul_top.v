@@ -8,9 +8,6 @@ module mul_top (
     output wire [31:0] result,
     output wire        result_valid
 );
-    // The CPU observes a product two clocks after issue.  Registering the
-    // operands first and the complete product next preserves that contract
-    // while keeping a load-forwarded operand out of the DSP input setup path.
     reg [1:0] valid_pipe;
     reg signed [31:0] operand_a_pipe;
     reg signed [31:0] operand_b_pipe;

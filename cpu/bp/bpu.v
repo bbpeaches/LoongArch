@@ -2,13 +2,13 @@ module bpu (
     input  wire        clk,
     input  wire        resetn,
 
-    // --- 单级预测端口（IF 阶段使用） ---
+    // --- 单级预测端口（IF 阶段） ---
     input  wire [31:0] pc,
     output wire        pred_taken,
     output wire [31:0] pred_target,
     output wire [ 7:0] pred_ghr,
 
-    // --- 更新端口（EX 阶段解析后延迟一拍送入） ---
+    // --- 更新端口（EX 阶段） ---
     input  wire        upd_en,
     input  wire [31:0] upd_pc,
     input  wire [ 7:0] upd_ghr,
@@ -37,8 +37,6 @@ module bpu (
 );
     wire upd_cond_en = upd_en && (upd_br_type == 2'b00);
 
-    // Conditional branches are installed even when their first outcome is
-    // not-taken, so direction training starts on the first execution.
     wire upd_btb_inv_en = upd_en && (upd_br_type == 2'b01) && !upd_actually_taken;
     wire upd_btb_we = upd_en && !upd_btb_inv_en;
     wire        btb_hit;
@@ -61,8 +59,6 @@ module bpu (
         .upd_ghr(upd_ghr), .upd_actually_taken(upd_actually_taken)
     );
 
-    // Keep the retired loop predictor disabled; it used to extend the IF
-    // next-PC path.  The BTB+tournament prediction below is fully single-cycle.
     assign stat_loop_hits            = 32'd0;
     assign stat_loop_confident       = 32'd0;
     assign stat_loop_correct         = 32'd0;

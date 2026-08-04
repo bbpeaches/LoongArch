@@ -13,8 +13,6 @@ module tournament_bpu (
     input  wire [7:0]  upd_ghr,
     input  wire        upd_actually_taken
 );
-    // 256-entry bimodal/gshare/chooser tables.  The counters are LUTRAM;
-    // valid maps make unread entries deterministic weak-not-taken after reset.
     reg  [1:0] bimodal_pht [0:255];
     reg  [7:0] ghr;
     reg  [1:0] gshare_pht  [0:255];

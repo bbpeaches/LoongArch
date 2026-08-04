@@ -74,15 +74,11 @@ module id_ex_reg (
         end
     end
 
-    // Keep flush (AGU/MMU exception) off the CE of payload regs — shared CE
-    // was timing-critical (AGU → flush → ex_rdata2 CE, fo~250).
     always @(posedge clk) begin
         if (~resetn) begin
             ex_waddr  <= 5'd0;
             ex_wb_sel <= 2'd0;
         end else if (flush) begin
-            // Bubble must not keep a stale wb_sel (mul/load), or MEM may wait
-            // forever / wrongly forward store data after load-use / mul-use.
             ex_waddr  <= 5'd0;
             ex_wb_sel <= 2'd0;
         end else if (!stall) begin

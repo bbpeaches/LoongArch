@@ -21,16 +21,12 @@ module stage_mem (
                           (mem_addr_align == 2'b10) ? data_sram_rdata[23:16] :
                                                       data_sram_rdata[31:24];
 
-    // Require a real completing op: bubbles may still carry a stale wb_sel.
     wire mem_is_load = mem_valid && mem_rf_we && (mem_wb_sel == 2'b01);
     wire mem_is_mul  = mem_valid && mem_rf_we && (mem_wb_sel == 2'b10);
     wire [31:0] mem_ram_rdata = mem_is_ld_b  ? {{24{lb_data[7]}}, lb_data} :
                                 mem_is_ld_bu ? {24'd0, lb_data}            :
                                 data_sram_rdata;
 
-    // Loads and multiplies are the two result-producing operations that can
-    // wait in MEM.  The multiply response is explicit rather than inferred
-    // from a fixed number of pipeline cycles.
     assign mem_done       = !mem_valid ||
                             (!mem_is_load && !mem_is_mul) ||
                             (mem_is_load && data_sram_resp_valid) ||

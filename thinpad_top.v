@@ -146,7 +146,6 @@ localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
 localparam [1:0] READ_WAIT_CYCLES  = 2'd1;
-// Soft Ext write: commit as soon as AW+W are captured (LoongArch CRN pipe used 0).
 localparam [1:0] WRITE_WAIT_CYCLES = 2'd0;
 
 always @(posedge clk_sram) begin
@@ -160,7 +159,6 @@ always @(posedge clk_sram) begin
             end
             S_READ: begin
                 if (rvalid_sram && rready_sram && rlast_sram) begin
-                    // Zero-idle: chain into a pending write without an IDLE beat.
                     if (awvalid_sram || wvalid_sram) slave_state <= S_WRITE;
                     else slave_state <= S_IDLE;
                 end
@@ -250,8 +248,7 @@ assign rid_sram    = rid_reg;
 wire [31:0] current_raddr = raddr_reg;
 
 reg aw_recvd, w_recvd;
-// A cycle-identical copy used only by the returned-read-data decode cone.
-// Keeping this fanout local avoids moving the write-control topology.
+
 (* keep = "true" *) reg w_recvd_rdata_reg;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
@@ -264,8 +261,6 @@ assign awready_sram = is_write && !aw_recvd && !bvalid_reg;
 assign wready_sram  = is_write && !w_recvd  && !bvalid_reg;
 wire aw_fire = awvalid_sram && awready_sram;
 wire w_fire  = wvalid_sram && wready_sram;
-// Preserve the original nonblocking-assignment priority: W acceptance wins
-// when it coincides with B retirement.
 wire w_recvd_next = w_fire ? 1'b1 :
                     ((bvalid_sram && bready_sram) ? 1'b0 : w_recvd);
 
@@ -398,9 +393,6 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-// Decode returned data from the local state copy.  Since the copy is updated
-// from the same next state as w_recvd, this is bit- and cycle-equivalent to
-// the original mem_addr/is_* based read-data mux.
 wire rdata_do_write = (slave_state == S_WRITE) && aw_recvd &&
                       w_recvd_rdata_reg && !bvalid_reg;
 wire [31:0] rdata_mem_addr = rdata_do_write ? current_waddr : current_raddr;

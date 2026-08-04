@@ -22,13 +22,10 @@ module hazard_ctrl (
 
     wire ex_dep_hit = id_valid && (dep_rs1_raw || dep_rs2_raw);
 
-    // Store rs2-only load-use: allow combo MEM→EX store forward (board soft path).
     wire is_store = (id_inst[31:22] == 10'b0010_1001_10) | (id_inst[31:22] == 10'b0010_1001_00);
     wire store_data_dep = is_store && !dep_rs1_raw && dep_rs2_raw;
     wire normal_load_use = ex_mem_read && ex_dep_hit && !store_data_dep;
 
-    // The multiplier is launched from ID and its two-stage result reaches MEM
-    // with the producing instruction.  Only a direct RAW consumer must wait.
     wire mul_use_hazard  = ex_valid_inst && ex_is_mul && ex_dep_hit;
 
     (* max_fanout = 8 *) wire stall_req_from_id = normal_load_use || mul_use_hazard;

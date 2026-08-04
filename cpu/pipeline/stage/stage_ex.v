@@ -137,8 +137,6 @@ module stage_ex (
         end
     endfunction
 
-    // CSRWR and CSRXCHG return the pre-write CSR value through rd.  CSRWR
-    // uses an all-one mask; CSRXCHG takes its mask from rj.
     assign csr_we    = ex_valid_inst && !stall_ex && (ex_csr_op == 2'd2 || ex_csr_op == 2'd3);
     assign csr_waddr = ex_csr_num;
     assign csr_wdata = ex_rdata2;
@@ -155,7 +153,6 @@ module stage_ex (
     assign ex_addr_align = ex_mem_addr[1:0];
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;
 
-    // mem_is_load is already gated by MEM valid/we in pipe.
     wire forward_store_data = mem_is_load && (mem_waddr == ex_rs2) && (mem_waddr != 5'd0);
     wire [31:0] actual_store_data = forward_store_data ? mem_final_data : ex_rdata2;
 

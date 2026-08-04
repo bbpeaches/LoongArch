@@ -67,8 +67,6 @@ module sram_axi_bridge(
     
     wire data_r_data_last = rvalid && rready && (rid == 4'd1) && rlast; 
     
-    // Accept a new data AR as soon as the previous data R completes, even if
-    // icache is also requesting — data keeps priority via choose_data_ar.
     reg data_ar_acc;
     always @(posedge clk) begin
         if(!resetn) data_ar_acc <= 0;
@@ -76,17 +74,11 @@ module sram_axi_bridge(
         else if(data_r_data_last) data_ar_acc <= 0;
     end
 
-    // Drop data_ar_acc combinationally on last beat so a back-to-back CPU load
-    // can assert AR in the same cycle the previous R completes.
     wire data_ar_busy = data_ar_acc && !data_r_data_last;
     wire do_data_ar = data_req && !data_wr && !data_ar_busy;
 
     wire do_data_burst = (data_size == 2'b11); 
 
-    // Both request producers hold their request, address and attributes until
-    // arready is observed.  A fixed-priority mux is therefore sufficient and
-    // avoids placing the EX-stage address adder on a bridge register-enable
-    // timing path.
     wire choose_data_ar = do_data_ar;
     assign arvalid = choose_data_ar || icache_arvalid;
     assign arid    = choose_data_ar ? 4'd1 : 4'd0;
@@ -118,8 +110,6 @@ module sram_axi_bridge(
         else if(bvalid && bready) w_sent <= 0;
     end
 
-    // Free the write channel on B so a back-to-back store can re-assert AW/W
-    // in the completion cycle.  capture_* must stay free of data_req (load CAM).
     wire aw_free = !aw_sent || (bvalid && bready);
     wire w_free  = !w_sent  || (bvalid && bready);
     wire capture_aw = data_wr && aw_free && !holding_aw;

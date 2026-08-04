@@ -48,19 +48,13 @@ module pipe(
     assign inst_sram_wr    = 1'b0;       
     assign inst_sram_size  = 2'b10;      
     assign inst_sram_wstrb = 4'b0000;
-    // DMW translation is deliberately kept off the fetch/data timing cones
-    // unless PG is active.  Unmapped paged addresses have no TLB support in
-    // this minimal core and therefore retain their identity physical address.
     wire [31:0] csr_crmd, csr_dmw0, csr_dmw1;
     wire paged_mode = csr_crmd[4] && !csr_crmd[3];
     wire dmw0_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw0[0]) ||
                            ((csr_crmd[1:0] == 2'd3) && csr_dmw0[3]);
     wire dmw1_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw1[0]) ||
                            ((csr_crmd[1:0] == 2'd3) && csr_dmw1[3]);
-    // Keep the six-input virtual-segment comparisons as individual terms.
-    // Each is exactly one LUT6 on 7-series; separating it from the paging
-    // and privilege terms prevents that unrelated control from being folded
-    // into the EX-address carry-output cone.
+
     (* keep = "true" *) wire inst_dmw0_vseg_match = (internal_inst_addr[31:29] == csr_dmw0[31:29]);
     (* keep = "true" *) wire inst_dmw1_vseg_match = (internal_inst_addr[31:29] == csr_dmw1[31:29]);
     (* keep = "true" *) wire data_dmw0_vseg_match = (internal_data_addr[31:29] == csr_dmw0[31:29]);
@@ -70,8 +64,7 @@ module pipe(
     wire inst_dmw1_match = paged_mode && dmw1_plv_enable && inst_dmw1_vseg_match;
     wire data_dmw0_match = paged_mode && dmw0_plv_enable && data_dmw0_vseg_match;
     wire data_dmw1_match = paged_mode && dmw1_plv_enable && data_dmw1_vseg_match;
-    // A DMW preserves VA[28:0], so keep the cache index/offset path as a
-    // direct wire and select only the physical segment bits.
+
     wire [2:0] internal_inst_pseg = inst_dmw0_match ? csr_dmw0[27:25] :
                                       inst_dmw1_match ? csr_dmw1[27:25] : internal_inst_addr[31:29];
     wire [2:0] internal_data_pseg = data_dmw0_match ? csr_dmw0[27:25] :
@@ -121,7 +114,6 @@ module pipe(
     assign data_sram_addr  = internal_data_paddr;
     assign data_sram_wdata = internal_data_wdata;
 
-    // EX-side waits bubble MEM; MEM-stage mul wait must hold MEM itself.
     assign data_mem_wait = internal_data_en & ~data_sram_data_ok;
     assign mem_wait      = data_mem_wait | icache_cacop_busy;
 
@@ -345,11 +337,6 @@ module pipe(
     wire [31:0] id_normal_br_target;
     wire        ex_fw_valid;
 
-    // mult_gen_0 has a two-stage pipeline.  Feed it when the multiply is
-    // admitted into ID/EX, one cycle before the instruction reaches EX.  CE
-    // stays asserted to move earlier products through the IP pipeline.  The
-    // valid pipe discards non-multiply results, so the DSP inputs do not need
-    // an additional zero-injection mux.
     wire mul_issue = resetn && id_valid_inst && (id_wb_sel == 2'b10) &&
                      !stall[1] && !flush[2];
     wire [31:0] mul_operand_a = id_alu_src1;
@@ -489,9 +476,6 @@ module pipe(
         .crmd(csr_crmd), .dmw0(csr_dmw0), .dmw1(csr_dmw1)
     );
 
-    // The multiplier has no ready signal.  Preserve its in-order responses
-    // until the matching multiply reaches MEM, so a future global pipeline
-    // stall cannot overwrite a completed product with a later IP output.
     localparam MUL_RESULT_FIFO_DEPTH = 4;
     reg [31:0] mul_result_fifo [0:MUL_RESULT_FIFO_DEPTH-1];
     reg [1:0]  mul_result_fifo_head;
@@ -503,9 +487,6 @@ module pipe(
     wire [31:0] mem_mul_result = mul_result_fifo_empty ? mul_result :
                                                         mul_result_fifo[mul_result_fifo_head];
 
-    // A response can bypass an empty FIFO directly into MEM.  When a prior
-    // response is buffered, dequeue it first and enqueue the new one in the
-    // same cycle, preserving multiply program order.
     wire mul_result_consume = mem_is_mul && mul_result_available;
     wire mul_result_push    = mul_result_valid &&
                               !(mul_result_fifo_empty && mul_result_consume);

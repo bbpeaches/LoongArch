@@ -22,8 +22,6 @@ module csr_file (
     reg [31:0] dmw0_reg;
     reg [31:0] dmw1_reg;
 
-    // Reset in direct-address mode.  Only the CRMD fields required by the
-    // supervisor are implemented; all other bits retain their software value.
     always @(posedge clk) begin
         if (!resetn) begin
             crmd_reg <= 32'h0000_0008; // DA=1, PG=0

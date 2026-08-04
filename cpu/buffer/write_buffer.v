@@ -126,9 +126,6 @@ module write_buffer #(
         end
     end
 
-    // Registered peeks of buf[head] / buf[head+1].  Store issue uses these so
-    // mem_wdata is not a combo path through the load-CAM / buffer RAM (timing),
-    // while still allowing same-cycle issue on pick_store.
     reg [31:0] q0_addr, q0_wdata;
     reg [ 3:0] q0_wstrb;
     reg [ 1:0] q0_size;
@@ -224,8 +221,7 @@ module write_buffer #(
 
     wire doing_load  = (state == S_DO_LOAD && !op_done) || pick_load;
     wire doing_store = (state == S_DO_STORE && !op_done) || pick_store;
-    // On store complete → next store, q0 still holds the retiring entry this
-    // cycle; issue from the already-registered q1 peek.
+
     wire        store_use_q1   = pick_store && store_completing;
     wire [31:0] store_iss_addr = store_use_q1 ? q1_addr  : q0_addr;
     wire [31:0] store_iss_data = store_use_q1 ? q1_wdata : q0_wdata;

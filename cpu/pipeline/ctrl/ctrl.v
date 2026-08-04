@@ -9,8 +9,6 @@ module ctrl (
     output wire [4:0] stall,
     output wire [4:0] flush
 );
-    // MEM-stage waits must hold MEM (01111); EX-side data/cacop waits only
-    // hold IF/ID/EX and bubble MEM (00111).
     assign stall = stall_from_mem_stage ? 5'b01111 :
                    stall_from_mem ? 5'b00111 :
                    stall_from_ex  ? 5'b00111 :
