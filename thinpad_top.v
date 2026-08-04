@@ -250,6 +250,9 @@ assign rid_sram    = rid_reg;
 wire [31:0] current_raddr = raddr_reg;
 
 reg aw_recvd, w_recvd;
+// A cycle-identical copy used only by the returned-read-data decode cone.
+// Keeping this fanout local avoids moving the write-control topology.
+(* keep = "true" *) reg w_recvd_rdata_reg;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
 reg [ 3:0] wstrb_reg;
@@ -261,11 +264,16 @@ assign awready_sram = is_write && !aw_recvd && !bvalid_reg;
 assign wready_sram  = is_write && !w_recvd  && !bvalid_reg;
 wire aw_fire = awvalid_sram && awready_sram;
 wire w_fire  = wvalid_sram && wready_sram;
+// Preserve the original nonblocking-assignment priority: W acceptance wins
+// when it coincides with B retirement.
+wire w_recvd_next = w_fire ? 1'b1 :
+                    ((bvalid_sram && bready_sram) ? 1'b0 : w_recvd);
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
         aw_recvd  <= 1'b0;
         w_recvd   <= 1'b0;
+        w_recvd_rdata_reg <= 1'b0;
         awaddr_reg<= 32'd0;
         wdata_reg <= 32'd0;
         wstrb_reg <= 4'd0;
@@ -276,9 +284,11 @@ always @(posedge clk_sram) begin
         if (bvalid_sram && bready_sram) begin
             bvalid_reg <= 1'b0;
             aw_recvd   <= 1'b0;
-            w_recvd    <= 1'b0;
             wwait_cnt  <= 2'd0;
         end
+
+        w_recvd           <= w_recvd_next;
+        w_recvd_rdata_reg <= w_recvd_next;
 
         if (aw_fire) begin
             aw_recvd <= 1'b1;
@@ -286,7 +296,6 @@ always @(posedge clk_sram) begin
             bid_reg <= awid_sram;
         end
         if (w_fire) begin
-            w_recvd <= 1'b1;
             wdata_reg <= wdata_sram;
             wstrb_reg <= wstrb_sram;
         end
@@ -389,11 +398,20 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-assign rdata_sram = is_base ? base_ram_data :
-                    is_ext  ? ext_ram_data  :
-                    is_uart ? (
-                        (mem_addr[7:2] == 6'h01) ? {4{uart_status}} :
-                        (mem_addr[7:2] == 6'h00) ? {24'd0, ext_uart_buffer} : 32'd0
+// Decode returned data from the local state copy.  Since the copy is updated
+// from the same next state as w_recvd, this is bit- and cycle-equivalent to
+// the original mem_addr/is_* based read-data mux.
+wire rdata_do_write = (slave_state == S_WRITE) && aw_recvd &&
+                      w_recvd_rdata_reg && !bvalid_reg;
+wire [31:0] rdata_mem_addr = rdata_do_write ? current_waddr : current_raddr;
+wire rdata_is_base = (rdata_mem_addr[31:22] == 10'h070);
+wire rdata_is_ext  = (rdata_mem_addr[31:22] == 10'h071);
+wire rdata_is_uart = (rdata_mem_addr[31:20] == 12'h1f0);
+assign rdata_sram = rdata_is_base ? base_ram_data :
+                    rdata_is_ext  ? ext_ram_data  :
+                    rdata_is_uart ? (
+                        (rdata_mem_addr[7:2] == 6'h01) ? {4{uart_status}} :
+                        (rdata_mem_addr[7:2] == 6'h00) ? {24'd0, ext_uart_buffer} : 32'd0
                     ) : 32'd0;
 
 assign flash_rp_n   = 1'b1;
