@@ -145,7 +145,7 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
-localparam [2:0] READ_WAIT_CYCLES  = 3'd1;
+localparam [2:0] READ_WAIT_CYCLES  = 3'd2;
 localparam [2:0] WRITE_WAIT_CYCLES = 3'd0;
 
 always @(posedge clk_sram) begin
