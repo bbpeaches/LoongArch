@@ -11,15 +11,20 @@ module sram_axi_bridge(
     output wire        icache_rvalid,
     input  wire        icache_rready,
 
-    input  wire        data_req,
-    input  wire        data_wr,
-    input  wire [ 1:0] data_size,
-    input  wire [31:0] data_addr,
-    input  wire [ 3:0] data_wstrb,
-    input  wire [31:0] data_wdata,
-    output wire        data_addr_ok,
-    output wire        data_data_ok,
-    output wire [31:0] data_rdata,
+    input  wire        data_read_req,
+    input  wire [ 1:0] data_read_size,
+    input  wire [31:0] data_read_addr,
+    output wire        data_read_addr_ok,
+    output wire        data_read_data_ok,
+    output wire [31:0] data_read_rdata,
+
+    input  wire        data_write_req,
+    input  wire [ 1:0] data_write_size,
+    input  wire [31:0] data_write_addr,
+    input  wire [ 3:0] data_write_wstrb,
+    input  wire [31:0] data_write_wdata,
+    output wire        data_write_addr_ok,
+    output wire        data_write_data_ok,
 
     output wire [ 3:0] arid,
     output wire [31:0] araddr,
@@ -68,23 +73,24 @@ module sram_axi_bridge(
     wire data_r_data_last = rvalid && rready && (rid == 4'd1) && rlast; 
     
     reg data_ar_acc;
+    wire data_ar_busy = data_ar_acc && !data_r_data_last;
+    wire do_data_ar = data_read_req && !data_ar_busy;
+    wire data_ar_fire = do_data_ar && arready;
+
     always @(posedge clk) begin
         if(!resetn) data_ar_acc <= 0;
-        else if(data_addr_ok && data_req && !data_wr && !data_r_data_last) data_ar_acc <= 1;
+        else if(data_ar_fire && !data_r_data_last) data_ar_acc <= 1;
         else if(data_r_data_last) data_ar_acc <= 0;
     end
 
-    wire data_ar_busy = data_ar_acc && !data_r_data_last;
-    wire do_data_ar = data_req && !data_wr && !data_ar_busy;
-
-    wire do_data_burst = (data_size == 2'b11); 
+    wire do_data_burst = (data_read_size == 2'b11);
 
     wire choose_data_ar = do_data_ar;
     assign arvalid = choose_data_ar || icache_arvalid;
     assign arid    = choose_data_ar ? 4'd1 : 4'd0;
-    assign araddr  = choose_data_ar ? data_addr : icache_araddr;
+    assign araddr  = choose_data_ar ? data_read_addr : icache_araddr;
     
-    assign arsize  = choose_data_ar ? (do_data_burst ? 3'd2 : {1'b0, data_size}) : 3'd2;
+    assign arsize  = choose_data_ar ? (do_data_burst ? 3'd2 : {1'b0, data_read_size}) : 3'd2;
     assign arlen   = choose_data_ar ? (do_data_burst ? 8'd3 : 8'd0) : 8'd7;
     
     assign arburst = choose_data_ar ? 2'b01 : 2'b10;
@@ -94,7 +100,7 @@ module sram_axi_bridge(
     assign arprot  = 3'd0;
     assign icache_arready = arvalid && arready && (arid == 4'd0);
 
-    wire data_req_w = data_req && data_wr;
+    wire data_req_w = data_write_req;
 
     reg aw_sent, w_sent;
     reg holding_aw;
@@ -112,8 +118,8 @@ module sram_axi_bridge(
 
     wire aw_free = !aw_sent || (bvalid && bready);
     wire w_free  = !w_sent  || (bvalid && bready);
-    wire capture_aw = data_wr && aw_free && !holding_aw;
-    wire capture_w  = data_wr && w_free  && !holding_w;
+    wire capture_aw = data_write_req && aw_free && !holding_aw;
+    wire capture_w  = data_write_req && w_free  && !holding_w;
 
     reg [31:0] held_awaddr;
     reg [2:0]  held_awsize;
@@ -124,8 +130,8 @@ module sram_axi_bridge(
     end
     always @(posedge clk) begin
         if (capture_aw) begin
-            held_awaddr <= data_addr;
-            held_awsize <= {1'b0, data_size};
+            held_awaddr <= data_write_addr;
+            held_awsize <= {1'b0, data_write_size};
         end
     end
 
@@ -138,14 +144,14 @@ module sram_axi_bridge(
     end
     always @(posedge clk) begin
         if (capture_w) begin
-            held_wdata <= data_wdata;
-            held_wstrb <= data_wstrb;
+            held_wdata <= data_write_wdata;
+            held_wstrb <= data_write_wstrb;
         end
     end
 
     assign awvalid = holding_aw ? 1'b1 : (data_req_w && aw_free);
-    assign awaddr  = holding_aw ? held_awaddr : data_addr;
-    assign awsize  = holding_aw ? held_awsize : {1'b0, data_size};
+    assign awaddr  = holding_aw ? held_awaddr : data_write_addr;
+    assign awsize  = holding_aw ? held_awsize : {1'b0, data_write_size};
     assign awid    = 4'd1;
     assign awlen   = 8'd0;
     assign awburst = 2'b01;
@@ -154,18 +160,19 @@ module sram_axi_bridge(
     assign awprot  = 3'd0;
 
     assign wvalid  = holding_w ? 1'b1 : (data_req_w && w_free);
-    assign wdata   = holding_w ? held_wdata : data_wdata;
-    assign wstrb   = holding_w ? held_wstrb : data_wstrb;
+    assign wdata   = holding_w ? held_wdata : data_write_wdata;
+    assign wstrb   = holding_w ? held_wstrb : data_write_wstrb;
     assign wid     = 4'd1;
     assign wlast   = 1'b1;
 
     wire aw_sent_eff = aw_sent && !(bvalid && bready);
     wire w_sent_eff  = w_sent  && !(bvalid && bready);
-    wire write_addr_ok = (awvalid && awready && w_sent_eff) ||
+    wire write_addr_accept = (awvalid && awready && w_sent_eff) ||
                          (wvalid && wready && aw_sent_eff) ||
                          (awvalid && awready && wvalid && wready);
 
-    assign data_addr_ok = (arvalid && arready && (arid == 4'd1)) || (data_req_w && write_addr_ok);
+    assign data_read_addr_ok  = data_ar_fire;
+    assign data_write_addr_ok = data_req_w && write_addr_accept;
 
     assign rready = (rvalid && rid == 4'd0) ? icache_rready : 1'b1; 
     assign bready = 1'b1;
@@ -174,7 +181,8 @@ module sram_axi_bridge(
     assign icache_rlast  = rlast;
     assign icache_rvalid = rvalid && (rid == 4'd0);
 
-    assign data_data_ok = (rvalid && (rid == 4'd1)) || (bvalid && (bid == 4'd1));
-    assign data_rdata   = rdata;
+    assign data_read_data_ok  = rvalid && (rid == 4'd1);
+    assign data_read_rdata    = rdata;
+    assign data_write_data_ok = bvalid && (bid == 4'd1);
 
 endmodule

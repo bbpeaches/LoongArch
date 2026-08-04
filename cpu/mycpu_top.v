@@ -70,15 +70,19 @@ module mycpu_top(
     wire        cpu_data_data_ok;
     wire [31:0] cpu_data_rdata;
 
-    wire        wb_data_req;
-    wire        wb_data_wr;
-    wire [ 1:0] wb_data_size;
-    wire [31:0] wb_data_addr;
-    wire [ 3:0] wb_data_wstrb;
-    wire [31:0] wb_data_wdata;
-    wire        wb_data_addr_ok;
-    wire        wb_data_data_ok;
-    wire [31:0] wb_data_rdata;
+    wire        wb_read_req;
+    wire [ 1:0] wb_read_size;
+    wire [31:0] wb_read_addr;
+    wire        wb_read_addr_ok;
+    wire        wb_read_data_ok;
+    wire [31:0] wb_read_rdata;
+    wire        wb_write_req;
+    wire [ 1:0] wb_write_size;
+    wire [31:0] wb_write_addr;
+    wire [ 3:0] wb_write_wstrb;
+    wire [31:0] wb_write_wdata;
+    wire        wb_write_addr_ok;
+    wire        wb_write_data_ok;
 
     wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
     wire [31:0] icache_araddr, icache_rdata;
@@ -134,15 +138,19 @@ module mycpu_top(
         .cpu_data_ok    (cpu_data_data_ok),
         .cpu_rdata      (cpu_data_rdata),
 
-        .mem_req        (wb_data_req),
-        .mem_wr         (wb_data_wr),
-        .mem_size       (wb_data_size),
-        .mem_addr       (wb_data_addr),
-        .mem_wstrb      (wb_data_wstrb),
-        .mem_wdata      (wb_data_wdata),
-        .mem_addr_ok    (wb_data_addr_ok),
-        .mem_data_ok    (wb_data_data_ok),
-        .mem_rdata      (wb_data_rdata),
+        .mem_read_req      (wb_read_req),
+        .mem_read_size     (wb_read_size),
+        .mem_read_addr     (wb_read_addr),
+        .mem_read_addr_ok  (wb_read_addr_ok),
+        .mem_read_data_ok  (wb_read_data_ok),
+        .mem_read_rdata    (wb_read_rdata),
+        .mem_write_req     (wb_write_req),
+        .mem_write_size    (wb_write_size),
+        .mem_write_addr    (wb_write_addr),
+        .mem_write_wstrb   (wb_write_wstrb),
+        .mem_write_wdata   (wb_write_wdata),
+        .mem_write_addr_ok (wb_write_addr_ok),
+        .mem_write_data_ok (wb_write_data_ok),
         .wb_empty       ()
     );
 
@@ -182,15 +190,19 @@ module mycpu_top(
         .icache_rvalid      (icache_rvalid),
         .icache_rready      (icache_rready),
 
-        .data_req           (wb_data_req),
-        .data_wr            (wb_data_wr),
-        .data_size          (wb_data_size),
-        .data_addr          (wb_data_addr),
-        .data_wstrb         (wb_data_wstrb),
-        .data_wdata         (wb_data_wdata),
-        .data_addr_ok       (wb_data_addr_ok),
-        .data_data_ok       (wb_data_data_ok),
-        .data_rdata         (wb_data_rdata),
+        .data_read_req      (wb_read_req),
+        .data_read_size     (wb_read_size),
+        .data_read_addr     (wb_read_addr),
+        .data_read_addr_ok  (wb_read_addr_ok),
+        .data_read_data_ok  (wb_read_data_ok),
+        .data_read_rdata    (wb_read_rdata),
+        .data_write_req     (wb_write_req),
+        .data_write_size    (wb_write_size),
+        .data_write_addr    (wb_write_addr),
+        .data_write_wstrb   (wb_write_wstrb),
+        .data_write_wdata   (wb_write_wdata),
+        .data_write_addr_ok (wb_write_addr_ok),
+        .data_write_data_ok (wb_write_data_ok),
 
         .arid               (arid),
         .araddr             (araddr),

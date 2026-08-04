@@ -525,9 +525,15 @@ module pipe(
     );
 
     reg [31:0] data_rdata_buf;
+    wire [ 7:0] response_byte = (ex_addr_align == 2'b00) ? data_sram_rdata[ 7:0] :
+                                (ex_addr_align == 2'b01) ? data_sram_rdata[15:8] :
+                                (ex_addr_align == 2'b10) ? data_sram_rdata[23:16] :
+                                                            data_sram_rdata[31:24];
+    wire [31:0] response_load_data = ex_is_ld_b  ? {{24{response_byte[7]}}, response_byte} :
+                                      ex_is_ld_bu ? {24'd0, response_byte} : data_sram_rdata;
     always @(posedge clk) begin
         if (data_sram_data_ok) begin
-            data_rdata_buf <= data_sram_rdata;
+            data_rdata_buf <= response_load_data;
         end
     end
     wire [31:0] actual_data_rdata = data_sram_data_ok ? data_sram_rdata : data_rdata_buf;

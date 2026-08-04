@@ -16,16 +16,11 @@ module stage_mem (
     output wire        mem_done,
     output wire        mem_wait
 );
-    wire [ 7:0] lb_data = (mem_addr_align == 2'b00) ? data_sram_rdata[ 7:0] :
-                          (mem_addr_align == 2'b01) ? data_sram_rdata[15:8] :
-                          (mem_addr_align == 2'b10) ? data_sram_rdata[23:16] :
-                                                      data_sram_rdata[31:24];
-
     wire mem_is_load = mem_valid && mem_rf_we && (mem_wb_sel == 2'b01);
     wire mem_is_mul  = mem_valid && mem_rf_we && (mem_wb_sel == 2'b10);
-    wire [31:0] mem_ram_rdata = mem_is_ld_b  ? {{24{lb_data[7]}}, lb_data} :
-                                mem_is_ld_bu ? {24'd0, lb_data}            :
-                                data_sram_rdata;
+    // Byte/unsigned-byte expansion is performed at the existing response
+    // capture edge in pipe.v; the MEM stage consumes the normalized word.
+    wire [31:0] mem_ram_rdata = data_sram_rdata;
 
     assign mem_done       = !mem_valid ||
                             (!mem_is_load && !mem_is_mul) ||

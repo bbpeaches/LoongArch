@@ -124,7 +124,7 @@ reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(200000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_r (
     .clk(clk_sram),
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
@@ -133,7 +133,7 @@ async_receiver #(.ClkFrequency(200000000), .Baud(115200)) ext_uart_r (
 );
 
 assign ext_uart_clear = ext_uart_ready;
-async_transmitter #(.ClkFrequency(200000000), .Baud(115200)) ext_uart_t (
+async_transmitter #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_t (
     .clk(clk_sram),
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
@@ -145,8 +145,8 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
-localparam [2:0] READ_WAIT_CYCLES  = 3'd3;
-localparam [2:0] WRITE_WAIT_CYCLES = 3'd2;
+localparam [2:0] READ_WAIT_CYCLES  = 3'd1;
+localparam [2:0] WRITE_WAIT_CYCLES = 3'd0;
 
 always @(posedge clk_sram) begin
     if (!sram_resetn) begin
@@ -249,7 +249,7 @@ wire [31:0] current_raddr = raddr_reg;
 
 reg aw_recvd, w_recvd;
 
-(* keep = "true" *) reg w_recvd_rdata_reg;
+(* keep = "true", max_fanout = 1 *) reg w_recvd_rdata_reg;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
 reg [ 3:0] wstrb_reg;
@@ -393,9 +393,10 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-wire rdata_do_write = (slave_state == S_WRITE) && aw_recvd &&
-                      w_recvd_rdata_reg && !bvalid_reg;
-wire [31:0] rdata_mem_addr = rdata_do_write ? current_waddr : current_raddr;
+// RDATA is sampled only while RVALID is asserted, which occurs in S_READ.
+// Use the registered read address directly so AW/W write-side state cannot
+// enter the asynchronous read-data cone during otherwise invalid R cycles.
+wire [31:0] rdata_mem_addr = current_raddr;
 wire rdata_is_base = (rdata_mem_addr[31:22] == 10'h070);
 wire rdata_is_ext  = (rdata_mem_addr[31:22] == 10'h071);
 wire rdata_is_uart = (rdata_mem_addr[31:20] == 12'h1f0);

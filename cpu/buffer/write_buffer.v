@@ -14,15 +14,20 @@ module write_buffer #(
     output wire        cpu_data_ok,
     output wire [31:0] cpu_rdata,
 
-    output wire        mem_req,
-    output wire        mem_wr,
-    output wire [ 1:0] mem_size,
-    output wire [31:0] mem_addr,
-    output wire [ 3:0] mem_wstrb,
-    output wire [31:0] mem_wdata,
-    input  wire        mem_addr_ok,
-    input  wire        mem_data_ok,
-    input  wire [31:0] mem_rdata,
+    output wire        mem_read_req,
+    output wire [ 1:0] mem_read_size,
+    output wire [31:0] mem_read_addr,
+    input  wire        mem_read_addr_ok,
+    input  wire        mem_read_data_ok,
+    input  wire [31:0] mem_read_rdata,
+
+    output wire        mem_write_req,
+    output wire [ 1:0] mem_write_size,
+    output wire [31:0] mem_write_addr,
+    output wire [ 3:0] mem_write_wstrb,
+    output wire [31:0] mem_write_wdata,
+    input  wire        mem_write_addr_ok,
+    input  wire        mem_write_data_ok,
 
     output wire        wb_empty
 );
@@ -80,49 +85,28 @@ module write_buffer #(
         end
     end
 
-    localparam S_IDLE     = 2'd0;
-    localparam S_DO_LOAD  = 2'd1;
-    localparam S_DO_STORE = 2'd2;
-
-    reg [1:0] state;
-
     wire load_ready_to_go  = load_req && !has_conflict;
-    wire store_completing  = (state == S_DO_STORE) && mem_data_ok;
-    wire store_ready_to_go = (count > 3'd1) ||
-                             ((count == 3'd1) && !store_completing);
-
-    wire op_done   = ((state == S_DO_LOAD) || (state == S_DO_STORE)) && mem_data_ok;
-    wire can_pick  = (state == S_IDLE) || op_done;
-    wire pick_load  = can_pick && load_ready_to_go;
-    wire pick_store = can_pick && !load_ready_to_go && store_ready_to_go;
-
-    always @(posedge clk) begin
-        if (~resetn) begin
-            state <= S_IDLE;
-        end else begin
-            case (state)
-                S_IDLE: begin
-                    if (pick_load)       state <= S_DO_LOAD;
-                    else if (pick_store) state <= S_DO_STORE;
-                end
-                S_DO_LOAD, S_DO_STORE: begin
-                    if (mem_data_ok) begin
-                        if (pick_load)       state <= S_DO_LOAD;
-                        else if (pick_store) state <= S_DO_STORE;
-                        else                 state <= S_IDLE;
-                    end
-                end
-                default: state <= S_IDLE;
-            endcase
-        end
-    end
-
+    reg load_busy, load_addr_sent;
     reg [31:0] load_addr_latch;
     reg [ 1:0] load_size_latch;
     always @(posedge clk) begin
-        if (pick_load) begin
-            load_addr_latch <= cpu_addr;
-            load_size_latch <= cpu_size;
+        if (~resetn) begin
+            load_busy      <= 1'b0;
+            load_addr_sent <= 1'b0;
+            load_addr_latch <= 32'd0;
+            load_size_latch <= 2'd0;
+        end else begin
+            if (mem_read_data_ok) begin
+                load_busy      <= 1'b0;
+                load_addr_sent <= 1'b0;
+            end else if (!load_busy && load_ready_to_go) begin
+                load_busy       <= 1'b1;
+                load_addr_sent  <= mem_read_addr_ok;
+                load_addr_latch <= cpu_addr;
+                load_size_latch <= cpu_size;
+            end else if (load_busy && !load_addr_sent && mem_read_addr_ok) begin
+                load_addr_sent <= 1'b1;
+            end
         end
     end
 
@@ -135,7 +119,8 @@ module write_buffer #(
 
     wire store_accept = store_req && !buf_full;
     wire store_push = store_accept;
-    wire store_pop  = store_completing;
+    reg store_busy;
+    wire store_pop = store_busy && mem_write_data_ok;
 
     integer i;
     always @(posedge clk) begin
@@ -143,7 +128,7 @@ module write_buffer #(
             head  <= 2'd0;
             tail  <= 2'd0;
             count <= 3'd0;
-            for (i = 0; i < DEPTH; i = i + 1) buf_valid[i] <= 1'b0;
+             for (i = 0; i < DEPTH; i = i + 1) buf_valid[i] <= 1'b0;
             q0_addr <= 32'd0; q0_wdata <= 32'd0; q0_wstrb <= 4'd0; q0_size <= 2'd0;
             q1_addr <= 32'd0; q1_wdata <= 32'd0; q1_wstrb <= 4'd0; q1_size <= 2'd0;
         end else begin
@@ -209,42 +194,32 @@ module write_buffer #(
         end
     end
 
-    reg mem_addr_rcv;
     always @(posedge clk) begin
         if (~resetn)
-            mem_addr_rcv <= 1'b0;
-        else if (mem_req && mem_addr_ok && !mem_data_ok)
-            mem_addr_rcv <= 1'b1;
-        else if (mem_data_ok)
-            mem_addr_rcv <= 1'b0;
+            store_busy <= 1'b0;
+        else if (store_pop)
+            store_busy <= 1'b0;
+        else if (!store_busy && !buf_empty && mem_write_addr_ok)
+            store_busy <= 1'b1;
     end
 
-    wire doing_load  = (state == S_DO_LOAD && !op_done) || pick_load;
-    wire doing_store = (state == S_DO_STORE && !op_done) || pick_store;
+    wire start_load = !load_busy && load_ready_to_go;
+    assign mem_read_req  = start_load || (load_busy && !load_addr_sent);
+    assign mem_read_addr = start_load ? cpu_addr : load_addr_latch;
+    assign mem_read_size = start_load ? cpu_size : load_size_latch;
 
-    wire        store_use_q1   = pick_store && store_completing;
-    wire [31:0] store_iss_addr = store_use_q1 ? q1_addr  : q0_addr;
-    wire [31:0] store_iss_data = store_use_q1 ? q1_wdata : q0_wdata;
-    wire [ 3:0] store_iss_strb = store_use_q1 ? q1_wstrb : q0_wstrb;
-    wire [ 1:0] store_iss_size = store_use_q1 ? q1_size  : q0_size;
-
-    wire mem_slot_free = !mem_addr_rcv || mem_data_ok;
-
-    assign mem_req   = (doing_load || doing_store) && mem_slot_free;
-    assign mem_wr    = doing_store;
-    assign mem_addr  = doing_store ? store_iss_addr :
-                       (pick_load ? cpu_addr : load_addr_latch);
-    assign mem_size  = doing_store ? store_iss_size :
-                       (pick_load ? cpu_size : load_size_latch);
-    assign mem_wstrb = doing_store ? store_iss_strb : 4'd0;
-    assign mem_wdata = doing_store ? store_iss_data : 32'd0;
+    assign mem_write_req   = !store_busy && !buf_empty;
+    assign mem_write_addr  = q0_addr;
+    assign mem_write_size  = q0_size;
+    assign mem_write_wstrb = q0_wstrb;
+    assign mem_write_wdata = q0_wdata;
 
     assign cpu_addr_ok = (store_req && store_accept) ||
-                         (load_req && doing_load && mem_slot_free && mem_addr_ok);
+                         (load_req && mem_read_req && mem_read_addr_ok);
 
     assign cpu_data_ok = (store_req && store_accept) ||
-                         ((state == S_DO_LOAD) && mem_data_ok);
+                         (load_busy && mem_read_data_ok);
 
-    assign cpu_rdata   = mem_rdata;
+    assign cpu_rdata   = mem_read_rdata;
 
 endmodule
