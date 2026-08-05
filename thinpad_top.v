@@ -124,7 +124,7 @@ reg  [7:0] ext_uart_tx;
 wire ext_uart_ready, ext_uart_clear, ext_uart_busy;
 reg  ext_uart_start, ext_uart_avai;
 
-async_receiver #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_r (
+async_receiver #(.ClkFrequency(140000000), .Baud(115200)) ext_uart_r (
     .clk(clk_sram),
     .RxD(rxd),
     .RxD_data_ready(ext_uart_ready),
@@ -133,7 +133,7 @@ async_receiver #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_r (
 );
 
 assign ext_uart_clear = ext_uart_ready;
-async_transmitter #(.ClkFrequency(150000000), .Baud(115200)) ext_uart_t (
+async_transmitter #(.ClkFrequency(140000000), .Baud(115200)) ext_uart_t (
     .clk(clk_sram),
     .TxD(txd),
     .TxD_busy(ext_uart_busy),
@@ -145,7 +145,7 @@ reg [1:0] slave_state;
 localparam S_IDLE  = 2'd0;
 localparam S_READ  = 2'd1;
 localparam S_WRITE = 2'd2;
-localparam [2:0] READ_WAIT_CYCLES  = 3'd2;
+localparam [2:0] READ_WAIT_CYCLES  = 3'd1;
 localparam [2:0] WRITE_WAIT_CYCLES = 3'd0;
 
 always @(posedge clk_sram) begin
