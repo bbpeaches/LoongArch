@@ -41,7 +41,10 @@ module pipe(
     wire         fetch_pc_stall;
     wire         internal_data_en;
     wire [ 3:0]  internal_data_wen;
-    wire [31:0]  internal_data_addr;
+    wire [28:0]  internal_data_addr_lo;
+    wire         internal_data_addr_carry29;
+    wire [ 2:0]  internal_data_addr_vseg_c0;
+    wire [ 2:0]  internal_data_addr_vseg_c1;
     wire [31:0]  internal_data_wdata;
 
     assign inst_sram_req   = internal_inst_en & fetch_issue_valid;
@@ -57,20 +60,27 @@ module pipe(
 
     (* keep = "true" *) wire inst_dmw0_vseg_match = (internal_inst_addr[31:29] == csr_dmw0[31:29]);
     (* keep = "true" *) wire inst_dmw1_vseg_match = (internal_inst_addr[31:29] == csr_dmw1[31:29]);
-    (* keep = "true" *) wire data_dmw0_vseg_match = (internal_data_addr[31:29] == csr_dmw0[31:29]);
-    (* keep = "true" *) wire data_dmw1_vseg_match = (internal_data_addr[31:29] == csr_dmw1[31:29]);
+    (* keep = "true" *) wire data_dmw0_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw0[31:29]);
+    (* keep = "true" *) wire data_dmw1_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw1[31:29]);
+    (* keep = "true" *) wire data_dmw0_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw0[31:29]);
+    (* keep = "true" *) wire data_dmw1_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw1[31:29]);
 
     wire inst_dmw0_match = paged_mode && dmw0_plv_enable && inst_dmw0_vseg_match;
     wire inst_dmw1_match = paged_mode && dmw1_plv_enable && inst_dmw1_vseg_match;
-    wire data_dmw0_match = paged_mode && dmw0_plv_enable && data_dmw0_vseg_match;
-    wire data_dmw1_match = paged_mode && dmw1_plv_enable && data_dmw1_vseg_match;
+    wire data_dmw0_c0_match = paged_mode && dmw0_plv_enable && data_dmw0_vseg_c0_match;
+    wire data_dmw1_c0_match = paged_mode && dmw1_plv_enable && data_dmw1_vseg_c0_match;
+    wire data_dmw0_c1_match = paged_mode && dmw0_plv_enable && data_dmw0_vseg_c1_match;
+    wire data_dmw1_c1_match = paged_mode && dmw1_plv_enable && data_dmw1_vseg_c1_match;
 
     wire [2:0] internal_inst_pseg = inst_dmw0_match ? csr_dmw0[27:25] :
                                       inst_dmw1_match ? csr_dmw1[27:25] : internal_inst_addr[31:29];
-    wire [2:0] internal_data_pseg = data_dmw0_match ? csr_dmw0[27:25] :
-                                      data_dmw1_match ? csr_dmw1[27:25] : internal_data_addr[31:29];
+    wire [2:0] internal_data_pseg_c0 = data_dmw0_c0_match ? csr_dmw0[27:25] :
+                                          data_dmw1_c0_match ? csr_dmw1[27:25] : internal_data_addr_vseg_c0;
+    wire [2:0] internal_data_pseg_c1 = data_dmw0_c1_match ? csr_dmw0[27:25] :
+                                          data_dmw1_c1_match ? csr_dmw1[27:25] : internal_data_addr_vseg_c1;
+    wire [2:0] internal_data_pseg = internal_data_addr_carry29 ? internal_data_pseg_c1 : internal_data_pseg_c0;
     wire [31:0] internal_inst_paddr = {internal_inst_pseg, internal_inst_addr[28:0]};
-    wire [31:0] internal_data_paddr = {internal_data_pseg, internal_data_addr[28:0]};
+    wire [31:0] internal_data_paddr = {internal_data_pseg, internal_data_addr_lo};
 
     assign inst_sram_addr  = internal_inst_paddr;
     assign inst_sram_wdata = 32'd0;
@@ -457,7 +467,11 @@ module pipe(
         .ex_result(ex_result), .ex_addr_align(ex_addr_align),
         .data_sram_en(internal_data_en),       
         .data_sram_wen(internal_data_wen),     
-        .data_sram_addr(internal_data_addr),   
+        .data_sram_addr(),
+        .data_sram_addr_lo(internal_data_addr_lo),
+        .data_sram_addr_carry29(internal_data_addr_carry29),
+        .data_sram_addr_vseg_c0(internal_data_addr_vseg_c0),
+        .data_sram_addr_vseg_c1(internal_data_addr_vseg_c1),
         .data_sram_wdata(internal_data_wdata), 
         .ex_mem_read(ex_mem_read),
         .csr_we(csr_we), .csr_waddr(csr_waddr), .csr_wdata(csr_wdata), .csr_wmask(csr_wmask),
