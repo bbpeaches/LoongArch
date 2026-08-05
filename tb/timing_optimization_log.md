@@ -286,3 +286,59 @@
   and TNS, so `cpu/pipeline/stage/stage_id.v:127` was restored to
   `id_valid_inst ? (id_use_imm ? id_imm : id_fwd_rdata2) : 32'd0` without
   another implementation run.
+
+## Attempt 20 - tight-clock calibration (approximately 162 MHz) - 2026-08-05 10:27 CST
+
+- XDC-only change: `../../run_vivado/constraints/thinpad_top.xdc:10` added
+  `set_clock_uncertainty -setup 0.496667 [get_clocks clk_out1_pll_example]`.
+  The 150 MHz PLL/MMCM configuration and all RTL were unchanged.
+- Evaluation: routed WNS `-1.677 ns`, TNS `-2096.197 ns`, 3099 setup failing
+  endpoints, hold WNS `+0.036 ns`. The worst path had `7.570 ns` data delay,
+  of which `6.246 ns` (82.509%) was routing. The report's total uncertainty
+  was `0.577 ns` (0.080 ns intrinsic plus 0.497 ns user uncertainty), so this
+  run is approximately a 162 MHz-equivalent target rather than the intended
+  160 MHz; its reconstructed 150 MHz WNS is `-1.180 ns`.
+- Decision: this calibration is worse than Attempt 14. Its report is archived
+  as `tb/attempt20_tight162mhz_calibration.rpt`; no bitstream was generated.
+  The XDC line is corrected to `0.416667 ns` before the exact 160 MHz trial.
+
+## Attempt 21 - 160 MHz-equivalent setup tightening - 2026-08-05 10:34 CST
+
+- XDC-only change: `../../run_vivado/constraints/thinpad_top.xdc:10` set
+  `set_clock_uncertainty -setup 0.416667 [get_clocks clk_out1_pll_example]`.
+  This adds exactly 0.417 ns of setup pressure to the unchanged 6.667 ns
+  generated CPU clock, equivalent to a 6.250 ns/160 MHz clock period.
+- Routed result: WNS `-1.039 ns`; TNS `-872.260 ns`; 2107 setup failing
+  endpoints; hold WNS `+0.036 ns`. The worst path is
+  `id_inst_reg[31]` to `fetch_fifo_pred_target0_reg[29]/CE`, with `6.992 ns`
+  data delay (18.936% logic, 81.064% routing). The report total uncertainty
+  is `0.497 ns`, confirming the target is applied correctly.
+- Decision: reconstructed 150 MHz WNS is `-0.622 ns` (`-1.039 + 0.417`),
+  worse than Attempt 14. The routed report is archived as
+  `tb/attempt21_tight160mhz.rpt`; no bitstream was generated. The XDC is now
+  advanced to the requested 170 MHz-equivalent trial.
+
+## Attempt 22 - 170 MHz-equivalent trial cancelled - 2026-08-05 10:35 CST
+
+- The XDC setup uncertainty was changed from `0.416667 ns` to `0.784314 ns`
+  in `../../run_vivado/constraints/thinpad_top.xdc:10`, but no project create,
+  synthesis, placement, routing, report, or bitstream was run.
+- At user direction the pending 170 MHz target was replaced before execution
+  by the 200 MHz-equivalent value `1.666667 ns`; this is a skipped experiment,
+  not a timing result.
+
+## Attempt 23 - 200 MHz-equivalent setup tightening - 2026-08-05 10:41 CST
+
+- XDC-only change: `../../run_vivado/constraints/thinpad_top.xdc:10` set
+  `set_clock_uncertainty -setup 1.666667 [get_clocks clk_out1_pll_example]`.
+  The CPU PLL/MMCM output remains 150 MHz; the extra setup pressure is exactly
+  the difference between 6.667 ns and a 5.000 ns/200 MHz period.
+- Routed result: WNS `-2.475 ns`; TNS `-7560.174 ns`; 6894 setup failing
+  endpoints; hold WNS `+0.074 ns`. The worst path is `ex_alu_src2_reg[16]`
+  to `raddr_reg_reg[20]/D`, with `7.505 ns` data delay (30.714% logic,
+  69.286% routing). The report total uncertainty is `1.747 ns`, confirming
+  the 200 MHz-equivalent target is applied correctly.
+- Decision: reconstructed 150 MHz WNS is `-0.808 ns` (`-2.475 + 1.667`),
+  significantly worse than Attempt 14. The routed report is archived as
+  `tb/attempt23_tight200mhz.rpt`; no bitstream was generated. The temporary
+  XDC lines were removed, restoring the original 150 MHz constraint.
