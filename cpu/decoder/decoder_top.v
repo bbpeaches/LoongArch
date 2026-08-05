@@ -91,14 +91,10 @@ module decoder_top (
     
     wire uses_raddr1 = !(inst_lu12i_w | inst_pcaddu12i | inst_bl_raw | inst_b | inst_csrrd);
     assign rf_raddr1 = (!uses_raddr1 || inst_csrwr) ? 5'd0 : inst[9:5];
-    wire fast_dest_is_raddr2 = (inst[31:26] == 6'b0101_10) | // beq
-                               (inst[31:26] == 6'b0101_11) | // bne
-                               (inst[31:26] == 6'b0110_00) | // blt
-                               (inst[31:26] == 6'b0110_01) | // bge
-                               (inst[31:26] == 6'b0110_10) | // bltu
-                               (inst[31:26] == 6'b0110_11) | // bgeu
-                               (inst[31:22] == 10'b0010_1001_10) | // st.w
-                               (inst[31:22] == 10'b0010_1001_00) | // st.b
+    // Reuse already-decoded opcodes (avoid duplicate opcode compares on ID→RF path).
+    wire fast_dest_is_raddr2 = inst_beq | inst_bne | inst_blt | inst_bge |
+                               inst_bltu | inst_bgeu |
+                               inst_st_w | inst_st_b_raw |
                                inst_csrwr | inst_csrxchg;
 
     wire uses_raddr2 = inst_add_w | inst_sub_w | inst_and | inst_or | inst_xor |
@@ -185,9 +181,10 @@ module decoder_top (
     );
 
     assign is_cpucfg = inst_cpucfg;
-    assign csr_op = inst_csrrd ? 2'd1 :
-                    inst_csrwr ? 2'd2 :
-                    inst_csrxchg ? 2'd3 : 2'd0;
+    // Flatten CSR opcode select onto the shared 8'h04 format decode.
+    assign csr_op = !(op_8 == 8'h04) ? 2'd0 :
+                    (inst[9:5] == 5'd0) ? 2'd1 :
+                    (inst[9:5] == 5'd1) ? 2'd2 : 2'd3;
     assign csr_num = inst[23:10];
     assign is_cacop = inst_cacop;
     assign cacop_code = inst[4:0];
