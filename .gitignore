@@ -17,3 +17,4 @@ tb/
 *.rpt
 xilinx_ip/*
 !*.xci
+l2cache/
