@@ -12,9 +12,12 @@ trace_readable.json
 *.jou
 prompt.md
 prompt2.md
-tb/
+/tb/
 *.pb
 *.rpt
+xsim.dir/
+obj_dir/
+*.wdb
 xilinx_ip/*
 !*.xci
 l2cache/
