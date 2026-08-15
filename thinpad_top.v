@@ -247,7 +247,7 @@ wire [31:0] current_raddr = raddr_reg;
 
 reg aw_recvd, w_recvd;
 
-(* keep = "true", max_fanout = 1 *) reg w_recvd_rdata_reg;
+reg w_recvd_rdata_reg;
 reg [31:0] awaddr_reg;
 reg [31:0] wdata_reg;
 reg [ 3:0] wstrb_reg;

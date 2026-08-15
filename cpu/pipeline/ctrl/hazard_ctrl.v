@@ -28,7 +28,7 @@ module hazard_ctrl (
 
     wire mul_use_hazard  = ex_valid_inst && ex_is_mul && ex_dep_hit;
 
-    (* max_fanout = 8 *) wire stall_req_from_id = normal_load_use || mul_use_hazard;
+    wire stall_req_from_id = normal_load_use || mul_use_hazard;
 
     ctrl _sys_ctrl (
         .stall_from_ex  (1'b0),

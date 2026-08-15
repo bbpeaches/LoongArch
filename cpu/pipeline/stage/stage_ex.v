@@ -119,7 +119,7 @@ module stage_ex (
 
     wire pred_wrong = (ex_pred_taken != actual_taken) || (actual_taken && target_wrong);
 
-    (* max_fanout = 32 *) wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
+    wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
 
     assign ex_br_taken  = ex_br_taken_opt;
     assign ex_br_target = actual_taken ? actual_target : (ex_pc + 32'd4);

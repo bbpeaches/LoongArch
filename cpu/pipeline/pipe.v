@@ -53,12 +53,12 @@ module pipe(
     wire dmw1_plv_enable = ((csr_crmd[1:0] == 2'd0) && csr_dmw1[0]) ||
                            ((csr_crmd[1:0] == 2'd3) && csr_dmw1[3]);
 
-    (* keep = "true" *) wire inst_dmw0_vseg_match = (internal_inst_addr[31:29] == csr_dmw0[31:29]);
-    (* keep = "true" *) wire inst_dmw1_vseg_match = (internal_inst_addr[31:29] == csr_dmw1[31:29]);
-    (* keep = "true" *) wire data_dmw0_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw0[31:29]);
-    (* keep = "true" *) wire data_dmw1_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw1[31:29]);
-    (* keep = "true" *) wire data_dmw0_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw0[31:29]);
-    (* keep = "true" *) wire data_dmw1_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw1[31:29]);
+    wire inst_dmw0_vseg_match = (internal_inst_addr[31:29] == csr_dmw0[31:29]);
+    wire inst_dmw1_vseg_match = (internal_inst_addr[31:29] == csr_dmw1[31:29]);
+    wire data_dmw0_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw0[31:29]);
+    wire data_dmw1_vseg_c0_match = (internal_data_addr_vseg_c0 == csr_dmw1[31:29]);
+    wire data_dmw0_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw0[31:29]);
+    wire data_dmw1_vseg_c1_match = (internal_data_addr_vseg_c1 == csr_dmw1[31:29]);
 
     wire inst_dmw0_match = paged_mode && dmw0_plv_enable && inst_dmw0_vseg_match;
     wire inst_dmw1_match = paged_mode && dmw1_plv_enable && inst_dmw1_vseg_match;
