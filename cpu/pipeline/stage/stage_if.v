@@ -5,6 +5,8 @@ module stage_if (
 
     input  wire        id_pred_wrong,
     input  wire [31:0] id_correct_pc,
+    input  wire        redirect_fetch,
+    input  wire        redirect_accept,
 
     input  wire        if_pred_taken,
     input  wire [31:0] if_pred_target,
@@ -12,11 +14,14 @@ module stage_if (
     output wire        inst_sram_en,
     output wire [31:0] inst_sram_addr,
     output wire [31:0] if_pc,
+    output wire [31:0] if_fetch_pc,
     output wire        if_req_fire
 );
     wire [31:0] seq_pc = if_pc + 32'd4;
 
-    wire [31:0] next_pc = id_pred_wrong    ? id_correct_pc :
+    wire [31:0] redirect_next_pc = (redirect_fetch && redirect_accept) ?
+                                  (id_correct_pc + 32'd4) : id_correct_pc;
+    wire [31:0] next_pc = id_pred_wrong    ? redirect_next_pc :
                           if_pred_taken    ? if_pred_target : seq_pc;
 
     wire flush_pc = id_pred_wrong;
@@ -32,7 +37,8 @@ module stage_if (
     );
 
     assign inst_sram_en   = resetn;
-    assign inst_sram_addr = if_pc;
+    assign inst_sram_addr = redirect_fetch ? id_correct_pc : if_pc;
+    assign if_fetch_pc    = inst_sram_addr;
     assign if_req_fire    = resetn && !stall_if;
 
 endmodule

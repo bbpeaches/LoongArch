@@ -20,6 +20,9 @@ module stage_ex (
     input  wire        mem_is_load,
     input  wire [ 4:0] mem_waddr,
     input  wire [31:0] mem_final_data,
+    input  wire        load_bypass_valid,
+    input  wire [ 4:0] load_bypass_waddr,
+    input  wire [31:0] load_bypass_data,
 
     input  wire [11:0] ex_br_info,
     input  wire        ex_is_branch,
@@ -50,13 +53,15 @@ module stage_ex (
     output wire [31:0] ex_cacop_addr,
 
     output wire        ex_br_taken,
+    output wire        ex_fast_redirect,
+    output wire        ex_jirl_redirect,
     output wire [31:0] ex_br_target,
     output wire        upd_bpu_en,
     output wire [31:0] upd_bpu_pc,
     output wire [ 7:0] upd_bpu_ghr,
     output wire [ 1:0] upd_bpu_br_type_out,
     output wire        upd_bpu_pred_taken,
-    output wire        upd_bpu_taken,
+    (* max_fanout = 8 *) output wire upd_bpu_taken,
     output wire [31:0] upd_bpu_target
 );
     wire [31:0] ex_alu_result;
@@ -119,10 +124,25 @@ module stage_ex (
 
     wire pred_wrong = (ex_pred_taken != actual_taken) || (actual_taken && target_wrong);
 
-    wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
+    (* max_fanout = 32 *) wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
 
     assign ex_br_taken  = ex_br_taken_opt;
+    assign ex_jirl_redirect = ex_br_taken_opt && is_jirl;
     assign ex_br_target = actual_taken ? actual_target : (ex_pc + 32'd4);
+
+    fast_redirect _fast_redirect (
+        .br_info_normal(ex_br_info[11:4]),
+        .is_jirl      (is_jirl),
+        .pred_taken   (ex_pred_taken),
+        .pred_target  (ex_pred_target),
+        .normal_target(ex_normal_br_target),
+        .eq           (ex_rj_eq_rd),
+        .lt           (ex_rj_lt_rd_signed),
+        .ltu          (ex_rj_lt_rd_unsigned),
+        .valid        (ex_valid_inst),
+        .stall        (stall_ex),
+        .redirect     (ex_fast_redirect)
+    );
 
     assign upd_bpu_en          = (ex_is_branch || ex_pred_taken) && ex_valid_inst && !stall_ex;
     assign upd_bpu_pc          = ex_pc;
@@ -165,7 +185,11 @@ module stage_ex (
     wire [3:0] ex_st_b_we = 4'b0001 << ex_addr_align;
 
     wire forward_store_data = mem_is_load && (mem_waddr == ex_rs2) && (mem_waddr != 5'd0);
-    wire [31:0] actual_store_data = forward_store_data ? mem_final_data : ex_rdata2;
+    wire forward_saved_load = load_bypass_valid &&
+                              (load_bypass_waddr == ex_rs2) &&
+                              (load_bypass_waddr != 5'd0);
+    wire [31:0] actual_store_data = forward_saved_load ? load_bypass_data :
+                                     forward_store_data ? mem_final_data : ex_rdata2;
 
     assign data_sram_en    = ex_mem_en;
     assign data_sram_wen   = ex_is_st_w ? 4'b1111 :

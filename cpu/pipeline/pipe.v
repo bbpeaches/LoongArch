@@ -30,14 +30,14 @@ module pipe(
     wire [4:0] flush;
 
     wire         internal_inst_en;
-    wire [31:0] internal_inst_addr;
+    (* max_fanout = 16 *) wire [31:0] internal_inst_addr;
     wire         inst_sram_wait;
     wire         fetch_issue_valid;
     wire         fetch_pc_stall;
     wire         internal_data_en;
     wire [ 3:0]  internal_data_wen;
     wire [28:0]  internal_data_addr_lo;
-    (* keep = "true" *) wire internal_data_addr_carry29;
+    wire internal_data_addr_carry29;
     wire [ 2:0]  internal_data_addr_vseg_c0;
     wire [ 2:0]  internal_data_addr_vseg_c1;
     wire [31:0]  internal_data_wdata;
@@ -131,7 +131,28 @@ module pipe(
     wire [7:0]  upd_bpu_ghr;
     wire [31:0] upd_bpu_pc, upd_bpu_target;
     wire         ex_br_taken;
+    wire         ex_fast_redirect;
+    wire         ex_jirl_redirect;
     wire [31:0] ex_br_target;
+    wire         redirect_fetch_eligible;
+
+    reg          jirl_redirect_pending;
+    (* max_fanout = 16 *) reg [31:0] jirl_redirect_target;
+    wire         pc_redirect = ex_fast_redirect || jirl_redirect_pending;
+    wire [31:0]  pc_redirect_target = jirl_redirect_pending ?
+                                      jirl_redirect_target : ex_br_target;
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            jirl_redirect_pending <= 1'b0;
+            jirl_redirect_target  <= 32'd0;
+        end else if (ex_jirl_redirect) begin
+            jirl_redirect_pending <= 1'b1;
+            jirl_redirect_target  <= ex_br_target;
+        end else if (jirl_redirect_pending) begin
+            jirl_redirect_pending <= 1'b0;
+        end
+    end
 
     reg        upd_bpu_en_r;
     reg [31:0] upd_bpu_pc_r;
@@ -165,7 +186,9 @@ module pipe(
     // IF 阶段
     // ==========================================
     wire [31:0] if_pc;
+    wire [31:0] if_fetch_pc;
     wire         if_req_fire;
+    wire         fetch_req_fire;
 
     bpu _bpu (
         .clk(clk), .resetn(resetn),
@@ -177,12 +200,14 @@ module pipe(
     );
 
     stage_if _stage_if (
-        .clk(clk), .resetn(resetn), .stall_if(fetch_pc_stall),
-        .id_pred_wrong(ex_br_taken), .id_correct_pc(ex_br_target), 
+        .clk(clk), .resetn(resetn), .stall_if(fetch_pc_stall | ex_jirl_redirect),
+        .id_pred_wrong(pc_redirect), .id_correct_pc(pc_redirect_target),
+        .redirect_fetch(redirect_fetch_eligible),
+        .redirect_accept(fetch_req_fire),
         .if_pred_taken(if_pred_taken), .if_pred_target(if_pred_target),
         .inst_sram_en(internal_inst_en),
         .inst_sram_addr(internal_inst_addr),
-        .if_pc(if_pc), .if_req_fire(if_req_fire)
+        .if_pc(if_pc), .if_fetch_pc(if_fetch_pc), .if_req_fire(if_req_fire)
     );
 
     reg         fetch_pending_valid;
@@ -222,50 +247,55 @@ module pipe(
     wire [2:0] fetch_occupancy = {2'b00, fetch_pending_valid} + {1'b0, fetch_fifo_count};
     wire [2:0] fetch_occupancy_after_consume = fetch_occupancy - (fetch_id_consume ? 3'd1 : 3'd0);
 
-    assign fetch_issue_valid = !flush[1] && (!fetch_pending_valid || inst_sram_data_ok) &&
-                               (fetch_occupancy_after_consume < 3'd2);
+    // Suppress the sequential request while JIRL resolves.  On the following
+    // cycle the registered target has priority and may issue immediately.
+    assign fetch_issue_valid = ex_jirl_redirect ? 1'b0 :
+                               (redirect_fetch_eligible ? 1'b1 :
+                               (!flush[1] && (!fetch_pending_valid || inst_sram_data_ok) &&
+                                (fetch_occupancy_after_consume < 3'd2)));
 
-    wire fetch_req_fire = inst_sram_req && inst_sram_addr_ok;
-    assign fetch_pc_stall = !fetch_req_fire;
+    assign fetch_req_fire = inst_sram_req && inst_sram_addr_ok;
+    assign fetch_pc_stall = !fetch_req_fire | ex_jirl_redirect;
 
     always @(posedge clk) begin
-        if (~resetn || flush[1]) begin
+        if (~resetn) begin
             fetch_pending_valid <= 1'b0;
             fetch_fifo_count    <= 2'd0;
         end else begin
-            if (fetch_resp_to_fifo && !fetch_fifo_pop) begin
-                fetch_fifo_count <= fetch_fifo_count + 2'd1;
-            end else if (!fetch_resp_to_fifo && fetch_fifo_pop) begin
-                fetch_fifo_count <= fetch_fifo_count - 2'd1;
-            end
+            if (flush[1]) begin
+                fetch_pending_valid <= 1'b0;
+                fetch_fifo_count    <= 2'd0;
+            end else begin
+                if (fetch_resp_to_fifo && !fetch_fifo_pop) begin
+                    fetch_fifo_count <= fetch_fifo_count + 2'd1;
+                end else if (!fetch_resp_to_fifo && fetch_fifo_pop) begin
+                    fetch_fifo_count <= fetch_fifo_count - 2'd1;
+                end
 
-            if (fetch_fifo_pop) begin
-                if (fetch_fifo_count == 2'd2) begin
+                if (fetch_fifo_pop && (fetch_fifo_count == 2'd2)) begin
                     fetch_fifo_pc0          <= fetch_fifo_pc1;
                     fetch_fifo_inst0        <= fetch_fifo_inst1;
                     fetch_fifo_pred_taken0  <= fetch_fifo_pred_taken1;
                     fetch_fifo_pred_target0 <= fetch_fifo_pred_target1;
                     fetch_fifo_pred_ghr0    <= fetch_fifo_pred_ghr1;
                 end
-            end
 
-            if (fetch_resp_to_fifo) begin
-                if (fetch_fifo_pop) begin
-                    if (fetch_fifo_count == 2'd1) begin
-                        fetch_fifo_pc0          <= fetch_pending_pc;
-                        fetch_fifo_inst0        <= inst_sram_rdata;
-                        fetch_fifo_pred_taken0  <= fetch_pending_pred_taken;
-                        fetch_fifo_pred_target0 <= fetch_pending_pred_target;
-                        fetch_fifo_pred_ghr0    <= fetch_pending_pred_ghr;
-                    end else begin
-                        fetch_fifo_pc1          <= fetch_pending_pc;
-                        fetch_fifo_inst1        <= inst_sram_rdata;
-                        fetch_fifo_pred_taken1  <= fetch_pending_pred_taken;
-                        fetch_fifo_pred_target1 <= fetch_pending_pred_target;
-                        fetch_fifo_pred_ghr1    <= fetch_pending_pred_ghr;
-                    end
-                end else begin
-                    if (fetch_fifo_count == 2'd0) begin
+                if (fetch_resp_to_fifo) begin
+                    if (fetch_fifo_pop) begin
+                        if (fetch_fifo_count == 2'd1) begin
+                            fetch_fifo_pc0          <= fetch_pending_pc;
+                            fetch_fifo_inst0        <= inst_sram_rdata;
+                            fetch_fifo_pred_taken0  <= fetch_pending_pred_taken;
+                            fetch_fifo_pred_target0 <= fetch_pending_pred_target;
+                            fetch_fifo_pred_ghr0    <= fetch_pending_pred_ghr;
+                        end else begin
+                            fetch_fifo_pc1          <= fetch_pending_pc;
+                            fetch_fifo_inst1        <= inst_sram_rdata;
+                            fetch_fifo_pred_taken1  <= fetch_pending_pred_taken;
+                            fetch_fifo_pred_target1 <= fetch_pending_pred_target;
+                            fetch_fifo_pred_ghr1    <= fetch_pending_pred_ghr;
+                        end
+                    end else if (fetch_fifo_count == 2'd0) begin
                         fetch_fifo_pc0          <= fetch_pending_pc;
                         fetch_fifo_inst0        <= inst_sram_rdata;
                         fetch_fifo_pred_taken0  <= fetch_pending_pred_taken;
@@ -282,12 +312,12 @@ module pipe(
             end
 
             if (fetch_req_fire) begin
-                fetch_pending_valid      <= 1'b1;
-                fetch_pending_pc         <= if_pc;
-                fetch_pending_pred_taken <= if_pred_taken;
-                fetch_pending_pred_target<= if_pred_target;
-                fetch_pending_pred_ghr   <= if_pred_ghr;
-            end else if (inst_sram_data_ok) begin
+                fetch_pending_valid       <= 1'b1;
+                fetch_pending_pc          <= if_fetch_pc;
+                fetch_pending_pred_taken  <= redirect_fetch_eligible ? 1'b0 : if_pred_taken;
+                fetch_pending_pred_target <= redirect_fetch_eligible ? 32'd0 : if_pred_target;
+                fetch_pending_pred_ghr    <= if_pred_ghr;
+            end else if (inst_sram_data_ok && !flush[1]) begin
                 fetch_pending_valid <= 1'b0;
             end
         end
@@ -389,6 +419,8 @@ module pipe(
     wire [31:0] ex_normal_br_target; 
     wire [ 4:0] ex_rs2;
 
+    assign redirect_fetch_eligible = pc_redirect;
+
     id_ex_reg _id_ex_reg (
         .clk(clk), .resetn(resetn), .stall(stall[1]), .flush(flush[2]),
         .id_pc(id_pc), .id_rf_we(id_rf_we), .id_waddr(id_waddr), .id_wb_sel(id_wb_sel),
@@ -435,6 +467,11 @@ module pipe(
 
     wire mem_is_load = mem_valid && mem_rf_we && (mem_wb_sel == 2'b01);
     wire mem_is_mul  = mem_valid && mem_rf_we && (mem_wb_sel == 2'b10);
+    // Preserve a completed load long enough to provide the following store's
+    // write data without adding an avoidable interlock.
+    reg        load_bypass_valid;
+    reg [ 4:0] load_bypass_waddr;
+    reg [31:0] load_bypass_data;
 
     stage_ex _stage_ex (
         .stall_ex(stall[2]),
@@ -447,6 +484,9 @@ module pipe(
         .mem_is_load(mem_is_load),
         .mem_waddr(mem_waddr),
         .mem_final_data(mem_final_data),
+        .load_bypass_valid(load_bypass_valid),
+        .load_bypass_waddr(load_bypass_waddr),
+        .load_bypass_data(load_bypass_data),
         .ex_br_info(ex_br_info), .ex_is_branch(ex_is_branch),
         .ex_pred_taken(ex_pred_taken), .ex_pred_target(ex_pred_target), .ex_pred_ghr(ex_pred_ghr), .ex_valid_inst(ex_valid_inst),
         .ex_normal_br_target(ex_normal_br_target), 
@@ -463,7 +503,8 @@ module pipe(
         .csr_we(csr_we), .csr_waddr(csr_waddr), .csr_wdata(csr_wdata), .csr_wmask(csr_wmask),
         .ex_cacop_valid(icache_cacop_valid), .ex_cacop_code_out(icache_cacop_code), .ex_cacop_addr(icache_cacop_addr),
         
-        .ex_br_taken(ex_br_taken), .ex_br_target(ex_br_target),
+        .ex_br_taken(ex_br_taken), .ex_fast_redirect(ex_fast_redirect),
+        .ex_jirl_redirect(ex_jirl_redirect), .ex_br_target(ex_br_target),
         .upd_bpu_en(upd_bpu_en), .upd_bpu_pc(upd_bpu_pc), .upd_bpu_ghr(upd_bpu_ghr),
         .upd_bpu_br_type_out(upd_bpu_br_type), .upd_bpu_pred_taken(upd_bpu_pred_taken),
         .upd_bpu_taken(upd_bpu_taken), .upd_bpu_target(upd_bpu_target)
@@ -532,8 +573,21 @@ module pipe(
     wire [31:0] response_load_data = ex_is_ld_b  ? {{24{response_byte[7]}}, response_byte} :
                                       ex_is_ld_bu ? {24'd0, response_byte} : data_sram_rdata;
     always @(posedge clk) begin
-        if (data_sram_data_ok) begin
-            data_rdata_buf <= response_load_data;
+        if (!resetn) begin
+            data_rdata_buf    <= 32'd0;
+            load_bypass_valid <= 1'b0;
+            load_bypass_waddr <= 5'd0;
+            load_bypass_data  <= 32'd0;
+        end else begin
+            load_bypass_valid <= data_sram_data_ok && ex_mem_read &&
+                                 (ex_waddr != 5'd0);
+            if (data_sram_data_ok) begin
+                data_rdata_buf <= response_load_data;
+                if (ex_mem_read && (ex_waddr != 5'd0)) begin
+                    load_bypass_waddr <= ex_waddr;
+                    load_bypass_data  <= response_load_data;
+                end
+            end
         end
     end
     wire [31:0] actual_data_rdata = data_sram_data_ok ? data_sram_rdata : data_rdata_buf;
@@ -570,9 +624,7 @@ module pipe(
     hazard_ctrl _hazard_ctrl (
         .ex_valid_inst (ex_valid_inst),
         .id_valid      (id_valid),     
-        .id_inst       (id_inst),       
-        
-        .id_rs1(id_rs1), .id_rs2(id_rs2),
+        .id_inst       (id_inst),
         .ex_waddr(ex_waddr), .ex_mem_read(ex_mem_read), .ex_is_mul(ex_is_mul),
         .ex_br_taken(ex_br_taken), 
         .if_wait(inst_sram_wait),  
