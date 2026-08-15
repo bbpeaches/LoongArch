@@ -24,12 +24,7 @@ module pipe(
     output wire [31:0] data_sram_wdata,
     input  wire        data_sram_addr_ok,
     input  wire        data_sram_data_ok,
-    input  wire [31:0] data_sram_rdata,
-    
-    output wire [31:0] debug_wb_pc,
-    output wire        debug_wb_rf_wen,
-    output wire [ 4:0] debug_wb_rf_wnum,
-    output wire [31:0] debug_wb_rf_wdata
+    input  wire [31:0] data_sram_rdata
 );
     wire [4:0] stall;
     wire [4:0] flush;
@@ -138,10 +133,6 @@ module pipe(
     wire         ex_br_taken;
     wire [31:0] ex_br_target;
 
-    wire [31:0] stat_btb_hits, stat_cond_preds, stat_pred_correct, stat_pred_wrong;
-    wire [31:0] stat_loop_overrides, stat_ret_preds, stat_ret_correct, stat_ret_wrong, stat_ras_fallbacks, stat_ras_valid_preds;
-    wire [31:0] stat_loop_hits, stat_loop_confident, stat_loop_correct, stat_loop_wrong, stat_loop_override_taken, stat_loop_override_wrong;
-
     reg        upd_bpu_en_r;
     reg [31:0] upd_bpu_pc_r;
     reg [ 7:0] upd_bpu_ghr_r;
@@ -182,11 +173,7 @@ module pipe(
         .pred_taken(if_pred_taken), .pred_target(if_pred_target), .pred_ghr(if_pred_ghr),
         .upd_en(upd_bpu_en_r), .upd_pc(upd_bpu_pc_r), .upd_ghr(upd_bpu_ghr_r),
         .upd_br_type(upd_bpu_br_type_r), .upd_pred_taken(upd_bpu_pred_taken_r),
-        .upd_actually_taken(upd_bpu_taken_r), .upd_target(upd_bpu_target_r),
-        .stat_btb_hits(stat_btb_hits), .stat_cond_preds(stat_cond_preds), .stat_pred_correct(stat_pred_correct), .stat_pred_wrong(stat_pred_wrong),
-        .stat_loop_overrides(stat_loop_overrides), .stat_ret_preds(stat_ret_preds), .stat_ret_correct(stat_ret_correct), .stat_ret_wrong(stat_ret_wrong), .stat_ras_fallbacks(stat_ras_fallbacks), .stat_ras_valid_preds(stat_ras_valid_preds),
-        .stat_loop_hits(stat_loop_hits), .stat_loop_confident(stat_loop_confident), .stat_loop_correct(stat_loop_correct), .stat_loop_wrong(stat_loop_wrong),
-        .stat_loop_override_taken(stat_loop_override_taken), .stat_loop_override_wrong(stat_loop_override_wrong)
+        .upd_actually_taken(upd_bpu_taken_r), .upd_target(upd_bpu_target_r)
     );
 
     stage_if _stage_if (
@@ -327,9 +314,9 @@ module pipe(
     // ==========================================
     // ID 阶段
     // ==========================================
-    wire         wb_rf_we, ex_rf_we, mem_rf_we;
-    wire [ 4:0] wb_waddr, ex_waddr, mem_waddr;
-    wire [31:0] wb_data, ex_result, mem_final_data;
+    wire         wb_rf_we, wb_rf_we_reg, ex_rf_we, mem_rf_we;
+    wire [ 4:0] wb_waddr, wb_waddr_reg, ex_waddr, mem_waddr;
+    wire [31:0] wb_data, wb_data_reg, ex_result, mem_final_data;
 
     wire         id_rf_we, id_mem_en, id_is_st_w, id_is_st_b, id_is_ld_b, id_is_ld_bu, id_is_branch;
     wire         id_is_cpucfg, id_is_cacop;
@@ -435,7 +422,7 @@ module pipe(
     // EX 阶段
     // ==========================================
     
-    wire [31:0] mem_pc, mem_result;
+    wire [31:0] mem_result;
     wire [ 1:0] mem_wb_sel, mem_addr_align;
     wire         mem_is_ld_b, mem_is_ld_bu, mem_valid;
     wire [ 1:0] ex_addr_align;
@@ -467,7 +454,6 @@ module pipe(
         .ex_result(ex_result), .ex_addr_align(ex_addr_align),
         .data_sram_en(internal_data_en),       
         .data_sram_wen(internal_data_wen),     
-        .data_sram_addr(),
         .data_sram_addr_lo(internal_data_addr_lo),
         .data_sram_addr_carry29(internal_data_addr_carry29),
         .data_sram_addr_vseg_c0(internal_data_addr_vseg_c0),
@@ -529,11 +515,11 @@ module pipe(
 
     ex_mem_reg _ex_mem_reg (
         .clk(clk), .resetn(resetn), .stall(stall[2]), .flush(flush[3]),
-        .ex_pc(ex_pc), .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
+        .ex_rf_we(ex_rf_we), .ex_waddr(ex_waddr), .ex_wb_sel(ex_wb_sel),
         .ex_is_ld_b(ex_is_ld_b), .ex_is_ld_bu(ex_is_ld_bu),
         .ex_addr_align(ex_addr_align), .ex_result(ex_result),
         .ex_valid_inst(ex_valid_inst),
-        .mem_pc(mem_pc), .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_wb_sel(mem_wb_sel),
+        .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_wb_sel(mem_wb_sel),
         .mem_is_ld_b(mem_is_ld_b), .mem_is_ld_bu(mem_is_ld_bu),
         .mem_addr_align(mem_addr_align), .mem_result(mem_result), .mem_valid(mem_valid)
     );
@@ -567,20 +553,15 @@ module pipe(
         .mem_final_data(mem_final_data), .mem_done(mem_done), .mem_wait(mul_mem_wait)
     );
 
-    wire [31:0] wb_pc;
     mem_wb_reg _mem_wb_reg (
         .clk(clk), .resetn(resetn), .stall(stall[3]), .flush(flush[4]),
-        .mem_pc(mem_pc), .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_final_data(mem_final_data), .mem_done(mem_done),
-        .wb_pc(wb_pc), .wb_rf_we(wb_rf_we), .wb_waddr(wb_waddr), .wb_data(wb_data)
+        .mem_rf_we(mem_rf_we), .mem_waddr(mem_waddr), .mem_final_data(mem_final_data), .mem_done(mem_done),
+        .wb_rf_we(wb_rf_we_reg), .wb_waddr(wb_waddr_reg), .wb_data(wb_data_reg)
     );
 
-    // ==========================================
-    // WB 阶段
-    // ==========================================
     stage_wb _stage_wb (
-        .wb_pc(wb_pc), .wb_rf_we(wb_rf_we), .wb_waddr(wb_waddr), .wb_data(wb_data),
-        .debug_wb_pc(debug_wb_pc), .debug_wb_rf_wen(debug_wb_rf_wen),
-        .debug_wb_rf_wnum(debug_wb_rf_wnum), .debug_wb_rf_wdata(debug_wb_rf_wdata)
+        .wb_rf_we_i(wb_rf_we_reg), .wb_waddr_i(wb_waddr_reg), .wb_data_i(wb_data_reg),
+        .wb_rf_we(wb_rf_we), .wb_waddr(wb_waddr), .wb_data(wb_data)
     );
 
     // ==========================================

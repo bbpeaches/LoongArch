@@ -113,9 +113,7 @@ mycpu_top u_cpu (
     .bid        (bid_sram),
     .bresp      (bresp_sram),
     .bvalid     (bvalid_sram),
-    .bready     (bready_sram),
-
-    .debug_wb_pc(), .debug_wb_rf_we(), .debug_wb_rf_wnum(), .debug_wb_rf_wdata()
+    .bready     (bready_sram)
 );
 
 wire [7:0] ext_uart_rx;

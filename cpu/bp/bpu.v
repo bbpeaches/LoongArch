@@ -15,25 +15,8 @@ module bpu (
     input  wire [ 1:0] upd_br_type,
     input  wire        upd_pred_taken,
     input  wire        upd_actually_taken,
-    input  wire [31:0] upd_target,
+    input  wire [31:0] upd_target
 
-    // --- 统计输出 ---
-    output reg  [31:0] stat_btb_hits,
-    output reg  [31:0] stat_cond_preds,
-    output reg  [31:0] stat_pred_correct,
-    output reg  [31:0] stat_pred_wrong,
-    output reg  [31:0] stat_loop_overrides,
-    output reg  [31:0] stat_ret_preds,
-    output reg  [31:0] stat_ret_correct,
-    output reg  [31:0] stat_ret_wrong,
-    output reg  [31:0] stat_ras_fallbacks,
-    output reg  [31:0] stat_ras_valid_preds,
-    output wire [31:0] stat_loop_hits,
-    output wire [31:0] stat_loop_confident,
-    output wire [31:0] stat_loop_correct,
-    output wire [31:0] stat_loop_wrong,
-    output wire [31:0] stat_loop_override_taken,
-    output wire [31:0] stat_loop_override_wrong
 );
     wire upd_cond_en = upd_en && (upd_br_type == 2'b00);
 
@@ -59,13 +42,6 @@ module bpu (
         .upd_ghr(upd_ghr), .upd_actually_taken(upd_actually_taken)
     );
 
-    assign stat_loop_hits            = 32'd0;
-    assign stat_loop_confident       = 32'd0;
-    assign stat_loop_correct         = 32'd0;
-    assign stat_loop_wrong           = 32'd0;
-    assign stat_loop_override_taken  = 32'd0;
-    assign stat_loop_override_wrong  = 32'd0;
-
     wire [31:0] ras_target;
     wire        ras_valid;
     ras _ras (
@@ -80,37 +56,4 @@ module bpu (
     assign pred_target = (btb_hit && is_fetch_ret && ras_valid) ? ras_target : btb_target_out;
     assign pred_taken  = btb_hit && (!is_fetch_cond || meta_taken);
 
-    wire pred_used_ret  = btb_hit && is_fetch_ret;
-    wire pred_ret_taken = btb_hit && is_fetch_ret && ras_valid;
-
-    always @(posedge clk) begin
-        if (~resetn) begin
-            stat_btb_hits       <= 32'd0;
-            stat_cond_preds     <= 32'd0;
-            stat_pred_correct   <= 32'd0;
-            stat_pred_wrong     <= 32'd0;
-            stat_loop_overrides <= 32'd0;
-            stat_ret_preds      <= 32'd0;
-            stat_ret_correct    <= 32'd0;
-            stat_ret_wrong      <= 32'd0;
-            stat_ras_fallbacks  <= 32'd0;
-            stat_ras_valid_preds<= 32'd0;
-        end else begin
-            if (btb_hit) stat_btb_hits <= stat_btb_hits + 1'b1;
-            if (btb_hit && is_fetch_cond) stat_cond_preds <= stat_cond_preds + 1'b1;
-            if (pred_used_ret) stat_ret_preds <= stat_ret_preds + 1'b1;
-            if (pred_ret_taken) stat_ras_valid_preds <= stat_ras_valid_preds + 1'b1;
-            if (btb_hit && is_fetch_ret && !ras_valid) stat_ras_fallbacks <= stat_ras_fallbacks + 1'b1;
-
-            if (upd_cond_en) begin
-                if (upd_pred_taken == upd_actually_taken) stat_pred_correct <= stat_pred_correct + 1'b1;
-                else stat_pred_wrong <= stat_pred_wrong + 1'b1;
-            end
-
-            if (upd_en && (upd_br_type == 2'b11)) begin
-                if (upd_pred_taken == upd_actually_taken) stat_ret_correct <= stat_ret_correct + 1'b1;
-                else stat_ret_wrong <= stat_ret_wrong + 1'b1;
-            end
-        end
-    end
 endmodule

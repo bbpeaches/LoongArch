@@ -27,9 +27,7 @@ module write_buffer #(
     output wire [ 3:0] mem_write_wstrb,
     output wire [31:0] mem_write_wdata,
     input  wire        mem_write_addr_ok,
-    input  wire        mem_write_data_ok,
-
-    output wire        wb_empty
+    input  wire        mem_write_data_ok
 );
     reg [31:0] buf_addr  [0:DEPTH-1];
     reg [31:0] buf_wdata [0:DEPTH-1];
@@ -43,7 +41,6 @@ module write_buffer #(
 
     wire buf_full  = (count == DEPTH);
     wire buf_empty = (count == 3'd0);
-    assign wb_empty = buf_empty;
 
     wire load_req  = cpu_req && !cpu_wr;
     wire store_req = cpu_req && cpu_wr;

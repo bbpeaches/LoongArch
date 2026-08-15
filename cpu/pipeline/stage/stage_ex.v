@@ -34,7 +34,6 @@ module stage_ex (
 
     output wire        data_sram_en,
     output wire [ 3:0] data_sram_wen,
-    output wire [31:0] data_sram_addr,
     output wire [28:0] data_sram_addr_lo,
     output wire        data_sram_addr_carry29,
     output wire [ 2:0] data_sram_addr_vseg_c0,
@@ -172,7 +171,6 @@ module stage_ex (
     assign data_sram_wen   = ex_is_st_w ? 4'b1111 :
                              ex_is_st_b ? ex_st_b_we : 4'b0000;
 
-    assign data_sram_addr  = ex_mem_addr;
     assign data_sram_addr_lo = ex_mem_addr_lo;
     assign data_sram_addr_carry29 = ex_mem_addr_carry29;
     assign data_sram_addr_vseg_c0 = ex_mem_addr_vseg_c0;

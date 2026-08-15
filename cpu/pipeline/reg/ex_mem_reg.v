@@ -1,7 +1,6 @@
 module ex_mem_reg (
     input  wire        clk, resetn, stall, flush,
 
-    input  wire [31:0] ex_pc,
     input  wire        ex_rf_we,
     input  wire [ 4:0] ex_waddr,
     input  wire [ 1:0] ex_wb_sel,
@@ -10,7 +9,6 @@ module ex_mem_reg (
     input  wire [31:0] ex_result,
     input  wire        ex_valid_inst,
 
-    output reg  [31:0] mem_pc,
     output reg         mem_rf_we,
     output reg  [ 4:0] mem_waddr,
     output reg  [ 1:0] mem_wb_sel,
@@ -34,7 +32,7 @@ module ex_mem_reg (
 
     always @(posedge clk) begin
         if (~resetn) begin
-            mem_pc <= 32'd0; mem_waddr <= 5'd0; mem_wb_sel <= 2'd0; 
+            mem_waddr <= 5'd0; mem_wb_sel <= 2'd0;
             mem_is_ld_b <= 1'b0; mem_is_ld_bu <= 1'b0; 
             mem_addr_align <= 2'b00; mem_result <= 32'd0;
         end else if (flush) begin
@@ -43,7 +41,7 @@ module ex_mem_reg (
             mem_is_ld_b  <= 1'b0;
             mem_is_ld_bu <= 1'b0;
         end else if (!stall) begin
-            mem_pc <= ex_pc; mem_waddr <= ex_waddr; mem_wb_sel <= ex_wb_sel; 
+            mem_waddr <= ex_waddr; mem_wb_sel <= ex_wb_sel;
             mem_is_ld_b <= ex_is_ld_b; mem_is_ld_bu <= ex_is_ld_bu; 
             mem_addr_align <= ex_addr_align; mem_result <= ex_result;
         end

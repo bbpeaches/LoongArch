@@ -42,12 +42,7 @@ module mycpu_top(
     input  wire [ 3:0] bid,
     input  wire [ 1:0] bresp,
     input  wire        bvalid,
-    output wire        bready,
-
-    output wire [31:0] debug_wb_pc,
-    output wire [ 3:0] debug_wb_rf_we,
-    output wire [ 4:0] debug_wb_rf_wnum,
-    output wire [31:0] debug_wb_rf_wdata
+    output wire        bready
 );
 
     wire        inst_sram_req;
@@ -87,9 +82,6 @@ module mycpu_top(
     wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
     wire [31:0] icache_araddr, icache_rdata;
 
-    wire        debug_wb_rf_wen_1bit;
-    assign debug_wb_rf_we = {4{debug_wb_rf_wen_1bit}};
-
     pipe u_cpu (
         .clk                (aclk),
         .resetn             (aresetn),
@@ -116,12 +108,7 @@ module mycpu_top(
         .data_sram_wdata    (cpu_data_wdata),
         .data_sram_addr_ok  (cpu_data_addr_ok),
         .data_sram_data_ok  (cpu_data_data_ok),
-        .data_sram_rdata    (cpu_data_rdata),
-
-        .debug_wb_pc        (debug_wb_pc),
-        .debug_wb_rf_wen    (debug_wb_rf_wen_1bit),
-        .debug_wb_rf_wnum   (debug_wb_rf_wnum),
-        .debug_wb_rf_wdata  (debug_wb_rf_wdata)
+        .data_sram_rdata    (cpu_data_rdata)
     );
 
     write_buffer u_wb (
@@ -150,8 +137,7 @@ module mycpu_top(
         .mem_write_wstrb   (wb_write_wstrb),
         .mem_write_wdata   (wb_write_wdata),
         .mem_write_addr_ok (wb_write_addr_ok),
-        .mem_write_data_ok (wb_write_data_ok),
-        .wb_empty       ()
+        .mem_write_data_ok (wb_write_data_ok)
     );
 
     icache u_icache (
