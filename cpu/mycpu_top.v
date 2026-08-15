@@ -82,7 +82,7 @@ module mycpu_top(
     wire        icache_arvalid, icache_arready, icache_rlast, icache_rvalid, icache_rready;
     wire [31:0] icache_araddr, icache_rdata;
 
-    pipe u_cpu (
+    pipe u_pipe (
         .clk                (aclk),
         .resetn             (aresetn),
 
