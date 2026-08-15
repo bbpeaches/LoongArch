@@ -391,9 +391,6 @@ end
 
 wire [7:0] uart_status = {2'b00, !ext_uart_busy, 4'b0000, ext_uart_avai};
 
-// RDATA is sampled only while RVALID is asserted, which occurs in S_READ.
-// Use the registered read address directly so AW/W write-side state cannot
-// enter the asynchronous read-data cone during otherwise invalid R cycles.
 wire [31:0] rdata_mem_addr = current_raddr;
 wire rdata_is_base = (rdata_mem_addr[31:22] == 10'h070);
 wire rdata_is_ext  = (rdata_mem_addr[31:22] == 10'h071);

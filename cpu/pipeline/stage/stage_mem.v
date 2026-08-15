@@ -18,8 +18,6 @@ module stage_mem (
 );
     wire mem_is_load = mem_valid && mem_rf_we && (mem_wb_sel == 2'b01);
     wire mem_is_mul  = mem_valid && mem_rf_we && (mem_wb_sel == 2'b10);
-    // Byte/unsigned-byte expansion is performed at the existing response
-    // capture edge in pipe.v; the MEM stage consumes the normalized word.
     wire [31:0] mem_ram_rdata = data_sram_rdata;
 
     assign mem_done       = !mem_valid ||

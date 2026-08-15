@@ -7,9 +7,6 @@ module agu (
     output wire [ 2:0] addr_vseg_c0,
     output wire [ 2:0] addr_vseg_c1
 );
-    // Split the addition at bit 29.  This is exactly base + offset modulo
-    // 2^32, while exposing both possible virtual-segment values so that the
-    // data DMW comparators can run in parallel with the low-bit carry chain.
     wire [29:0] low_sum = {1'b0, base[28:0]} + {1'b0, offset[28:0]};
 
     assign addr_lo      = low_sum[28:0];
