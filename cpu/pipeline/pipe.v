@@ -37,7 +37,7 @@ module pipe(
     wire         internal_data_en;
     wire [ 3:0]  internal_data_wen;
     wire [28:0]  internal_data_addr_lo;
-    wire         internal_data_addr_carry29;
+    (* keep = "true" *) wire internal_data_addr_carry29;
     wire [ 2:0]  internal_data_addr_vseg_c0;
     wire [ 2:0]  internal_data_addr_vseg_c1;
     wire [31:0]  internal_data_wdata;
