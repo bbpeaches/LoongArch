@@ -18,7 +18,7 @@ module ctrl (
     assign flush[0] = 1'b0;
     assign flush[1] = flush_from_ex; 
     
-    wire flush_2_opt = flush_from_ex || (stall[1] && !stall[2]);
+    (* max_fanout = 8 *) wire flush_2_opt = flush_from_ex || (stall[1] && !stall[2]);
     assign flush[2] = flush_2_opt; 
     
     assign flush[3] = (stall[2] && !stall[3]);
