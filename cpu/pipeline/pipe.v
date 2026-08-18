@@ -30,7 +30,7 @@ module pipe(
     wire [4:0] flush;
 
     wire         internal_inst_en;
-    (* max_fanout = 16 *) wire [31:0] internal_inst_addr;
+    wire [31:0] internal_inst_addr;
     wire         inst_sram_wait;
     wire         fetch_issue_valid;
     wire         fetch_pc_stall;
@@ -137,7 +137,7 @@ module pipe(
     wire         redirect_fetch_eligible;
 
     reg          jirl_redirect_pending;
-    (* max_fanout = 16 *) reg [31:0] jirl_redirect_target;
+    reg [31:0] jirl_redirect_target;
     wire         pc_redirect = ex_fast_redirect || jirl_redirect_pending;
     wire [31:0]  pc_redirect_target = jirl_redirect_pending ?
                                       jirl_redirect_target : ex_br_target;

@@ -61,7 +61,7 @@ module stage_ex (
     output wire [ 7:0] upd_bpu_ghr,
     output wire [ 1:0] upd_bpu_br_type_out,
     output wire        upd_bpu_pred_taken,
-    (* max_fanout = 8 *) output wire upd_bpu_taken,
+    output wire upd_bpu_taken,
     output wire [31:0] upd_bpu_target
 );
     wire [31:0] ex_alu_result;
@@ -124,7 +124,7 @@ module stage_ex (
 
     wire pred_wrong = (ex_pred_taken != actual_taken) || (actual_taken && target_wrong);
 
-    (* max_fanout = 32 *) wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
+    wire ex_br_taken_opt = pred_wrong && ex_valid_inst && !stall_ex;
 
     assign ex_br_taken  = ex_br_taken_opt;
     assign ex_jirl_redirect = ex_br_taken_opt && is_jirl;
